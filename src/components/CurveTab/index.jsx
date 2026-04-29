@@ -14,22 +14,28 @@ export default function CurveTab() {
 
   const curveRef = useRef(null);
   const pieRef = useRef(null);
+  const compRef = useRef(null);
   const curveInst = useRef(null);
   const pieInst = useRef(null);
+  const compInst = useRef(null);
 
   const idx = Math.min(selIdx, Math.max(projects.length - 1, 0));
   const p = projects[idx];
   const c = p ? calcProjectCost(p, platforms, globalConfig, roles) : null;
 
   useEffect(() => {
-    if (!p || !c || !curveRef.current || !pieRef.current) return;
+    if (!p || !c || !curveRef.current || !pieRef.current || !compRef.current) return;
 
     if (curveInst.current) curveInst.current.destroy();
     if (pieInst.current) pieInst.current.destroy();
+    if (compInst.current) compInst.current.destroy();
 
     const maxEp = Math.max(p.eps * 2, 40);
     const labels = [];
     const dTot = [], dAi = [], dHr = [], dFix = [];
+    const dCompHr = [], dCompAi = [];
+    const globalHrBase = roles.reduce((a, r) => a + r.count * r.salary * (p.days / 30), 0);
+
     for (let e = 1; e <= maxEp; e++) {
       const cc = calcProjectCost({ ...p, eps: e }, platforms, globalConfig, roles);
       labels.push(e);
@@ -37,6 +43,8 @@ export default function CurveTab() {
       dAi.push(Math.round(cc.aiCost / e));
       dHr.push(Math.round(cc.hrCost / e));
       dFix.push(Math.round(cc.fixCost / e));
+      dCompHr.push(Math.round(cc.hrCost));
+      dCompAi.push(Math.round(cc.aiCost));
     }
 
     curveInst.current = new Chart(curveRef.current, {
@@ -54,6 +62,29 @@ export default function CurveTab() {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
+          tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ¥${ctx.parsed.y.toLocaleString()}` } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 10, font: { size: 11 } }, title: { display: true, text: '集数', font: { size: 11 } } },
+          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 }, callback: v => '¥' + v.toLocaleString() } },
+        },
+      },
+    });
+
+    compInst.current = new Chart(compRef.current, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: '项目人力成本', data: dCompHr, borderColor: '#BA7517', fill: true, backgroundColor: 'rgba(186,117,23,0.05)', tension: 0.2, pointRadius: 0 },
+          { label: '全局人力基准 (参考)', data: Array(maxEp).fill(Math.round(globalHrBase)), borderColor: '#666', borderDash: [5, 5], fill: false, tension: 0, pointRadius: 0 },
+          { label: 'AI算力成本', data: dCompAi, borderColor: '#3B6D11', fill: false, tension: 0.2, pointRadius: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'top' },
           tooltip: { mode: 'index', intersect: false, callbacks: { label: ctx => `${ctx.dataset.label}: ¥${ctx.parsed.y.toLocaleString()}` } },
         },
         scales: {
@@ -84,6 +115,7 @@ export default function CurveTab() {
     return () => {
       if (curveInst.current) { curveInst.current.destroy(); curveInst.current = null; }
       if (pieInst.current) { pieInst.current.destroy(); pieInst.current = null; }
+      if (compInst.current) { compInst.current.destroy(); compInst.current = null; }
     };
   }, [idx, seriesVis, projects, platforms, roles, globalConfig]);
 
@@ -134,6 +166,13 @@ export default function CurveTab() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <div className="stitle" style={{ margin: 0 }}>人力 vs AI 成本对比</div>
+        <div style={{ position: 'relative', width: '100%', height: 250, marginTop: 10 }}>
+          <canvas ref={compRef} />
+        </div>
       </div>
 
       <div className="card">

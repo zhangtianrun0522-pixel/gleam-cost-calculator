@@ -13,7 +13,7 @@ export default function ProjectsTab() {
   const handleAdd = () => {
     const p = {
       name: '新项目 ' + (projects.length + 1),
-      eps: 20, days: 30, scriptCost: 0,
+      eps: 20, days: 30, scriptCost: 0, staffing: [],
       revPlat: 0, revBrand: 0, revLic: 0, revMerch: 0, revViews: 0, revCpm: 0,
     };
     addProject(p);
