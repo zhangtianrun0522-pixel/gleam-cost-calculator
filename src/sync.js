@@ -9,6 +9,7 @@ export async function saveToCloud(supabase, userId, state) {
           roles: state.roles,
           global_config: state.globalConfig,
           projects: state.projects,
+          templates: state.templates,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' }
@@ -27,7 +28,7 @@ export async function loadFromCloud(supabase, userId) {
   try {
     const { data, error } = await supabase
       .from('user_data')
-      .select('platforms, roles, global_config, projects')
+      .select('platforms, roles, global_config, projects, templates')
       .eq('user_id', userId)
       .single();
 
@@ -40,6 +41,7 @@ export async function loadFromCloud(supabase, userId) {
         roles: data.roles,
         globalConfig: data.global_config,
         projects: data.projects,
+        templates: data.templates || [],
       },
       error: null,
     };
