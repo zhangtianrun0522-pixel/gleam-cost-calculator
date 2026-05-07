@@ -1,6 +1,6 @@
 export function calcProjectCost(p, platforms, globalConfig, roles) {
   const plat = platforms.find(x => x.active) || platforms[0] || { rate: 100 };
-  const ptsPerEp = globalConfig.aiRate * globalConfig.aiDur * (globalConfig.shotRatio || 1) + globalConfig.aiImgPts * globalConfig.aiImgN;
+  const ptsPerEp = calcEpisodePoints(globalConfig).totalPoints;
   const aiCost = plat.rate > 0 ? (ptsPerEp * p.eps) / plat.rate : 0;
   const months = p.days / 30;
   const hrCost = p.staffing && p.staffing.length > 0
@@ -12,6 +12,29 @@ export function calcProjectCost(p, platforms, globalConfig, roles) {
   const rev = (p.revPlat || 0) * p.eps + (p.revBrand || 0) + (p.revLic || 0) + (p.revMerch || 0)
     + (p.revViews || 0) * 10000 / 1000 * (p.revCpm || 0);
   return { aiCost, hrCost, fixCost, scriptCost, total, rev, net: rev - total, months };
+}
+
+export function calcEpisodePoints(globalConfig) {
+  const videoPoints = (globalConfig.aiRate || 0) * (globalConfig.aiDur || 0) * (globalConfig.shotRatio || 1);
+  const imagePoints = (globalConfig.aiImgPts || 0) * (globalConfig.aiImgN || 0);
+  return { videoPoints, imagePoints, totalPoints: videoPoints + imagePoints };
+}
+
+export function calcProjectPoints(p, globalConfig, reserveRate = 0) {
+  const ep = calcEpisodePoints(globalConfig);
+  const eps = Math.max(Number(p.eps) || 0, 0);
+  const videoPoints = ep.videoPoints * eps;
+  const imagePoints = ep.imagePoints * eps;
+  const basePoints = videoPoints + imagePoints;
+  const reservePoints = basePoints * Math.max(Number(reserveRate) || 0, 0);
+  const totalPoints = basePoints + reservePoints;
+  return { eps, videoPoints, imagePoints, basePoints, reservePoints, totalPoints };
+}
+
+export function fmtPoints(n) {
+  n = Math.round(n);
+  if (Math.abs(n) >= 10000) return (n / 10000).toFixed(1) + "万积分";
+  return n.toLocaleString() + "积分";
 }
 
 export function fmt(n) {

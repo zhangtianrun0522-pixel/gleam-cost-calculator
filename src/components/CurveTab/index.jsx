@@ -9,6 +9,7 @@ export default function CurveTab() {
   const roles = useStore(s => s.roles);
   const globalConfig = useStore(s => s.globalConfig);
 
+  const [scope, setScope] = useState('global');
   const [selIdx, setSelIdx] = useState(0);
   const [seriesVis, setSeriesVis] = useState({ tot: true, ai: true, hr: true, fix: false });
 
@@ -21,23 +22,54 @@ export default function CurveTab() {
 
   const idx = Math.min(selIdx, Math.max(projects.length - 1, 0));
   const p = projects[idx];
-  const c = p ? calcProjectCost(p, platforms, globalConfig, roles) : null;
+  const projectCosts = projects.map(project => calcProjectCost(project, platforms, globalConfig, roles));
+  const totalEps = projects.reduce((sum, project) => sum + (Number(project.eps) || 0), 0);
+  const totalDays = projects.reduce((sum, project) => sum + (Number(project.days) || 0), 0);
+  const globalCost = projectCosts.reduce((acc, cost) => ({
+    aiCost: acc.aiCost + cost.aiCost,
+    hrCost: acc.hrCost + cost.hrCost,
+    fixCost: acc.fixCost + cost.fixCost,
+    scriptCost: acc.scriptCost + cost.scriptCost,
+    total: acc.total + cost.total,
+    rev: acc.rev + cost.rev,
+    net: acc.net + cost.net,
+  }), { aiCost: 0, hrCost: 0, fixCost: 0, scriptCost: 0, total: 0, rev: 0, net: 0 });
+  const selectedCost = p ? calcProjectCost(p, platforms, globalConfig, roles) : null;
+  const isGlobal = scope === 'global';
+  const c = isGlobal ? globalCost : selectedCost;
+  const analysisEps = isGlobal ? totalEps : (p?.eps || 0);
 
   useEffect(() => {
-    if (!p || !c || !curveRef.current || !pieRef.current || !compRef.current) return;
+    if (!c || !curveRef.current || !pieRef.current || !compRef.current) return;
+    if (!isGlobal && !p) return;
+    if (isGlobal && projects.length === 0) return;
 
     if (curveInst.current) curveInst.current.destroy();
     if (pieInst.current) pieInst.current.destroy();
     if (compInst.current) compInst.current.destroy();
 
-    const maxEp = Math.max(p.eps * 2, 40);
+    const baseEps = Math.max(analysisEps, 1);
+    const maxEp = Math.max(baseEps * 2, 40);
     const labels = [];
     const dTot = [], dAi = [], dHr = [], dFix = [];
     const dCompHr = [], dCompAi = [];
-    const globalHrBase = roles.reduce((a, r) => a + r.count * r.salary * (p.days / 30), 0);
+    const globalHrBase = isGlobal
+      ? roles.reduce((a, r) => a + r.count * r.salary * (Math.max(totalDays, 30) / 30), 0)
+      : roles.reduce((a, r) => a + r.count * r.salary * (p.days / 30), 0);
+
+    const calcScaledGlobalCost = (eps) => {
+      const scale = baseEps > 0 ? eps / baseEps : 1;
+      return {
+        aiCost: c.aiCost * scale,
+        hrCost: c.hrCost,
+        fixCost: c.fixCost,
+        scriptCost: c.scriptCost,
+        total: c.aiCost * scale + c.hrCost + c.fixCost + c.scriptCost,
+      };
+    };
 
     for (let e = 1; e <= maxEp; e++) {
-      const cc = calcProjectCost({ ...p, eps: e }, platforms, globalConfig, roles);
+      const cc = isGlobal ? calcScaledGlobalCost(e) : calcProjectCost({ ...p, eps: e }, platforms, globalConfig, roles);
       labels.push(e);
       dTot.push(Math.round(cc.total / e));
       dAi.push(Math.round(cc.aiCost / e));
@@ -76,7 +108,7 @@ export default function CurveTab() {
       data: {
         labels,
         datasets: [
-          { label: '项目人力成本', data: dCompHr, borderColor: '#BA7517', fill: true, backgroundColor: 'rgba(186,117,23,0.05)', tension: 0.2, pointRadius: 0 },
+          { label: isGlobal ? '全局人力成本' : '项目人力成本', data: dCompHr, borderColor: '#BA7517', fill: true, backgroundColor: 'rgba(186,117,23,0.05)', tension: 0.2, pointRadius: 0 },
           { label: '全局人力基准 (参考)', data: Array(maxEp).fill(Math.round(globalHrBase)), borderColor: '#666', borderDash: [5, 5], fill: false, tension: 0, pointRadius: 0 },
           { label: 'AI算力成本', data: dCompAi, borderColor: '#3B6D11', fill: false, tension: 0.2, pointRadius: 0 },
         ],
@@ -117,9 +149,9 @@ export default function CurveTab() {
       if (pieInst.current) { pieInst.current.destroy(); pieInst.current = null; }
       if (compInst.current) { compInst.current.destroy(); compInst.current = null; }
     };
-  }, [idx, seriesVis, projects, platforms, roles, globalConfig]);
+  }, [idx, scope, seriesVis, projects, platforms, roles, globalConfig, c, isGlobal, p, analysisEps, totalDays]);
 
-  if (!p || !c) return <div className="card" style={{ textAlign: 'center', color: '#aaa', padding: 20 }}>暂无项目，请先在「项目管理」中添加</div>;
+  if (!projects.length || !c) return <div className="card" style={{ textAlign: 'center', color: '#aaa', padding: 20 }}>暂无项目，请先在「项目管理」中添加</div>;
 
   const items = [
     { l: 'AI积分（分镜+图像）', v: c.aiCost, cl: '#185FA5' },
@@ -136,16 +168,27 @@ export default function CurveTab() {
 
   return (
     <div>
-      <div className="fld" style={{ marginBottom: 14, maxWidth: 260 }}>
-        <label>选择分析项目</label>
-        <select value={idx} onChange={e => setSelIdx(Number(e.target.value))}>
-          {projects.map((proj, i) => <option key={i} value={i}>{proj.name}</option>)}
-        </select>
+      <div className="curve-controls">
+        <div className="fld" style={{ maxWidth: 220 }}>
+          <label>分析范围</label>
+          <select value={scope} onChange={e => setScope(e.target.value)}>
+            <option value="global">全局汇总</option>
+            <option value="project">单项目</option>
+          </select>
+        </div>
+        {scope === 'project' && (
+          <div className="fld" style={{ maxWidth: 260 }}>
+            <label>选择分析项目</label>
+            <select value={idx} onChange={e => setSelIdx(Number(e.target.value))}>
+              {projects.map((proj, i) => <option key={i} value={i}>{proj.name}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="g4" style={{ marginBottom: 14 }}>
-        <div className="mc"><div className="ml">总成本</div><div className="mv">{fmt(c.total)}</div><div className="ms">全季</div></div>
-        <div className="mc"><div className="ml">单集均摊</div><div className="mv warn">{fmt(c.total / Math.max(p.eps, 1))}</div><div className="ms">元/集</div></div>
+        <div className="mc"><div className="ml">总成本</div><div className="mv">{fmt(c.total)}</div><div className="ms">{isGlobal ? '全局汇总' : '全季'}</div></div>
+        <div className="mc"><div className="ml">单集均摊</div><div className="mv warn">{fmt(c.total / Math.max(analysisEps, 1))}</div><div className="ms">{isGlobal ? `${analysisEps}集汇总` : '元/集'}</div></div>
         <div className="mc"><div className="ml">AI积分占比</div><div className="mv">{c.total > 0 ? (c.aiCost / c.total * 100).toFixed(1) + '%' : '—'}</div><div className="ms">分镜+图像</div></div>
         <div className="mc"><div className="ml">净利润</div><div className={`mv ${c.net >= 0 ? 'ok' : 'bad'}`}>{(c.net >= 0 ? '+' : '') + fmt(c.net)}</div><div className="ms">预估</div></div>
       </div>

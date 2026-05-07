@@ -41,7 +41,7 @@ export async function loadFromCloud(supabase, userId) {
         roles: data.roles,
         globalConfig: data.global_config,
         projects: data.projects,
-        templates: data.templates || [],
+        templates: Array.isArray(data.templates) ? data.templates : null,
       },
       error: null,
     };

@@ -17,10 +17,12 @@ export default function AuthButton() {
   const roles = useStore((s) => s.roles);
   const globalConfig = useStore((s) => s.globalConfig);
   const projects = useStore((s) => s.projects);
+  const templates = useStore((s) => s.templates);
   const setPlatforms = useStore((s) => s.setPlatforms);
   const setRoles = useStore((s) => s.setRoles);
   const setGlobalConfig = useStore((s) => s.setGlobalConfig);
   const setProjects = useStore((s) => s.setProjects);
+  const setTemplates = useStore((s) => s.setTemplates);
 
   const debounceRef = useRef(null);
 
@@ -35,6 +37,7 @@ export default function AuthButton() {
             if (data.roles) setRoles(data.roles);
             if (data.globalConfig) setGlobalConfig(data.globalConfig);
             if (data.projects) setProjects(data.projects);
+            if (Array.isArray(data.templates)) setTemplates(data.templates);
           }
           setSyncStatus('saved');
         } else if (event === 'SIGNED_OUT') {
@@ -56,11 +59,11 @@ export default function AuthButton() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSyncStatus('syncing');
     debounceRef.current = setTimeout(async () => {
-      const { error } = await saveToCloud(supabase, user.id, { platforms, roles, globalConfig, projects });
+      const { error } = await saveToCloud(supabase, user.id, { platforms, roles, globalConfig, projects, templates });
       setSyncStatus(error ? 'error' : 'saved');
     }, 1500);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [platforms, roles, globalConfig, projects, user]);
+  }, [platforms, roles, globalConfig, projects, templates, user]);
 
   const handleLogin = async () => {
     if (!email.trim()) return;
