@@ -1,8 +1,7 @@
 import useStore from '../store';
 import { calcProjectCost, fmt, getBottleneck } from '../calc';
-import AuthButton from './AuthButton';
 
-export default function Header() {
+export default function Header({ user, syncStatus, onLogout }) {
   const projects = useStore((s) => s.projects);
   const platforms = useStore((s) => s.platforms);
   const globalConfig = useStore((s) => s.globalConfig);
@@ -28,7 +27,13 @@ export default function Header() {
             {bottleneck ? '瓶颈: ' + bottleneck : '资源充足'}
           </span>
         </div>
-        <AuthButton />
+        <div className="auth-chip">
+          <span className={syncStatus === 'error' ? 'bad' : ''}>
+            {syncStatus === 'syncing' ? '同步中...' : syncStatus === 'saved' ? '已同步' : syncStatus === 'loading' ? '读取中...' : syncStatus === 'error' ? '同步失败' : '已登录'}
+          </span>
+          <span>{user?.user_metadata?.team_name || user?.email}</span>
+          <button onClick={onLogout}>退出</button>
+        </div>
       </div>
     </div>
   );

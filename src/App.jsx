@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Header from './components/Header';
+import AuthGate from './components/AuthGate';
 import TabBar from './components/TabBar';
 import GlobalConfig from './components/GlobalConfig';
 import ProjectsTab from './components/ProjectsTab';
@@ -19,14 +20,18 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('global');
 
   return (
-    <div className="wrap">
-      <Header />
-      <TabBar activeTab={activeTab} onChange={setActiveTab} tabs={tabs} />
-      {activeTab === 'global' && <GlobalConfig onNext={() => setActiveTab('projects')} />}
-      {activeTab === 'projects' && <ProjectsTab />}
-      {activeTab === 'points' && <PointsPlanTab />}
-      {activeTab === 'pool' && <PoolTab />}
-      {activeTab === 'curve' && <CurveTab />}
-    </div>
+    <AuthGate>
+      {({ user, syncStatus, onLogout }) => (
+        <div className="wrap">
+          <Header user={user} syncStatus={syncStatus} onLogout={onLogout} />
+          <TabBar activeTab={activeTab} onChange={setActiveTab} tabs={tabs} />
+          {activeTab === 'global' && <GlobalConfig onNext={() => setActiveTab('projects')} />}
+          {activeTab === 'projects' && <ProjectsTab />}
+          {activeTab === 'points' && <PointsPlanTab />}
+          {activeTab === 'pool' && <PoolTab />}
+          {activeTab === 'curve' && <CurveTab />}
+        </div>
+      )}
+    </AuthGate>
   );
 }

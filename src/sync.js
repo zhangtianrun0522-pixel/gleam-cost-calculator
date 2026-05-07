@@ -30,7 +30,7 @@ export async function loadFromCloud(supabase, userId) {
       .from('user_data')
       .select('platforms, roles, global_config, projects, templates')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) return { data: null, error };
     if (!data) return { data: null, error: null };

@@ -31,6 +31,14 @@ const defaultTemplates = [
 
 const defaultGlobalConfig = { aiRate: 5, aiDur: 120, shotRatio: 3.0, aiImgPts: 10, aiImgN: 80, cSoft: 2000, cServer: 1500, cMisc: 3000 };
 
+const defaultState = {
+  platforms: defaultPlatforms,
+  roles: defaultRoles,
+  globalConfig: defaultGlobalConfig,
+  projects: defaultProjects,
+  templates: defaultTemplates,
+};
+
 function migrateFromOldKeys() {
   const SK = { plat: "gleam_v3_plat", roles: "gleam_v3_roles", global: "gleam_v3_global", proj: "gleam_v3_proj", templates: "gleam_v3_templates" };
   const result = {};
@@ -54,17 +62,18 @@ const migrated = migrateFromOldKeys();
 const useStore = create(
   persist(
     (set) => ({
-      platforms: migrated.platforms || defaultPlatforms,
-      roles: migrated.roles || defaultRoles,
-      globalConfig: migrated.globalConfig || defaultGlobalConfig,
-      projects: migrated.projects || defaultProjects,
-      templates: migrated.templates || defaultTemplates,
+      platforms: migrated.platforms || defaultState.platforms,
+      roles: migrated.roles || defaultState.roles,
+      globalConfig: migrated.globalConfig || defaultState.globalConfig,
+      projects: migrated.projects || defaultState.projects,
+      templates: migrated.templates || defaultState.templates,
 
       setPlatforms: (platforms) => set({ platforms }),
       setRoles: (roles) => set({ roles }),
       setGlobalConfig: (globalConfig) => set({ globalConfig }),
       setProjects: (projects) => set({ projects }),
       setTemplates: (templates) => set({ templates }),
+      resetStore: () => set(defaultState),
 
       updateProject: (index, patch) =>
         set((state) => ({ projects: state.projects.map((p, i) => i === index ? { ...p, ...patch } : p) })),
