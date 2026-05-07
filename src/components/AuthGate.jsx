@@ -12,6 +12,17 @@ function applyCloudData(data, setters) {
   if (Array.isArray(data.templates)) setters.setTemplates(data.templates);
 }
 
+const AUTH_INIT_TIMEOUT_MS = 4000;
+const DATA_LOAD_TIMEOUT_MS = 8000;
+
+function withTimeout(promise, ms, errorMessage) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(errorMessage)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export default function AuthGate({ children }) {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -41,14 +52,22 @@ export default function AuthGate({ children }) {
 
   const debounceRef = useRef(null);
   const userIdRef = useRef(null);
+  const loadSeqRef = useRef(0);
 
   const loadUserData = async (sessionUser) => {
+    const loadSeq = loadSeqRef.current + 1;
+    loadSeqRef.current = loadSeq;
     setDataReady(false);
     setDataError('');
     setSyncStatus('loading');
-    const { data, error } = await loadFromCloud(supabase, sessionUser.id);
+    const { data, error } = await withTimeout(
+      loadFromCloud(supabase, sessionUser.id),
+      DATA_LOAD_TIMEOUT_MS,
+      '云端数据读取超时，请刷新页面或退出后重试。'
+    ).catch((err) => ({ data: null, error: err }));
+    if (loadSeq !== loadSeqRef.current) return;
     if (error) {
-      setDataError('加载云端数据失败，请稍后刷新重试。');
+      setDataError(error.message || '加载云端数据失败，请稍后刷新重试。');
       setSyncStatus('error');
       return;
     } else {
@@ -64,30 +83,53 @@ export default function AuthGate({ children }) {
     setDataReady(true);
   };
 
+  const activateSession = async (sessionUser) => {
+    setUser(sessionUser);
+    setAuthReady(true);
+    await loadUserData(sessionUser);
+  };
+
   useEffect(() => {
     let alive = true;
+    let fallbackTimer = null;
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    fallbackTimer = setTimeout(() => {
       if (!alive) return;
-      if (session?.user) {
-        setUser(session.user);
-        await loadUserData(session.user);
-      }
-      if (alive) setAuthReady(true);
-    });
+      setMessage('登录状态检查超时，请重新登录。');
+      setAuthReady(true);
+    }, AUTH_INIT_TIMEOUT_MS);
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (!alive) return;
+        clearTimeout(fallbackTimer);
+        if (session?.user) {
+          activateSession(session.user);
+        } else {
+          setAuthReady(true);
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        clearTimeout(fallbackTimer);
+        setMessage('登录状态检查失败，请重新登录。');
+        setAuthReady(true);
+      });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!alive) return;
       if (event === 'PASSWORD_RECOVERY') {
+        loadSeqRef.current += 1;
         setUser(session?.user || null);
         setMode('reset');
         setDataReady(false);
         setAuthReady(true);
       } else if (event === 'SIGNED_IN' && session?.user) {
-        setUser(session.user);
-        await loadUserData(session.user);
-        setAuthReady(true);
+        setTimeout(() => {
+          if (alive) activateSession(session.user);
+        }, 0);
       } else if (event === 'SIGNED_OUT') {
+        loadSeqRef.current += 1;
         userIdRef.current = null;
         resetStore();
         setUser(null);
@@ -100,6 +142,7 @@ export default function AuthGate({ children }) {
 
     return () => {
       alive = false;
+      clearTimeout(fallbackTimer);
       listener.subscription.unsubscribe();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };

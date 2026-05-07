@@ -64,3 +64,5 @@
 - `node -e "import('./src/sync.js').then(...)"` 通过，确认 `sync.js` 模块可正常导入。
 - AuthGate 改为邮箱+密码体系后 `npm run build` 通过：92 modules transformed，耗时 920ms；产物 `dist/assets/index-BF4Gcml9.js` 约 601.34 kB，仍有同类 chunk 大小警告。
 - `rg -n "signInWithOtp|signInWithPassword|signUp|resetPasswordForEmail|updateUser|PASSWORD_RECOVERY|shouldCreateUser|发送登录链接|邮箱链接" src Progress.md` 已确认旧 Magic Link 登录 API 不再使用，密码认证 API 接线完整。
+- 线上生产站 `https://gleam-cost-calculator.vercel.app/` 出现停留在“正在检查登录状态...”的问题；已给 AuthGate 增加登录检查超时、Supabase 回调异步解耦、云端数据读取超时和同步失败页，避免认证/数据请求卡住时无限等待。
+- 本次 hotfix 后 `npm run build` 通过：92 modules transformed，耗时 880ms；产物 `dist/assets/index-BWlITj3l.js` 约 601.95 kB，仍有同类 chunk 大小警告。
