@@ -6,9 +6,10 @@ export default function Header({ user, syncStatus, onLogout }) {
   const platforms = useStore((s) => s.platforms);
   const globalConfig = useStore((s) => s.globalConfig);
   const roles = useStore((s) => s.roles);
+  const people = useStore((s) => s.people);
 
   const totalCost = projects.reduce(
-    (sum, p) => sum + calcProjectCost(p, platforms, globalConfig, roles).total,
+    (sum, p) => sum + calcProjectCost(p, platforms, globalConfig, roles, people).total,
     0
   );
   const bottleneck = getBottleneck(projects, roles);

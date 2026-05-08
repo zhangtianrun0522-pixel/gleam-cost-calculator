@@ -7,6 +7,7 @@ export default function CurveTab() {
   const projects = useStore(s => s.projects);
   const platforms = useStore(s => s.platforms);
   const roles = useStore(s => s.roles);
+  const people = useStore(s => s.people);
   const globalConfig = useStore(s => s.globalConfig);
 
   const [scope, setScope] = useState('global');
@@ -22,7 +23,7 @@ export default function CurveTab() {
 
   const idx = Math.min(selIdx, Math.max(projects.length - 1, 0));
   const p = projects[idx];
-  const projectCosts = projects.map(project => calcProjectCost(project, platforms, globalConfig, roles));
+  const projectCosts = projects.map(project => calcProjectCost(project, platforms, globalConfig, roles, people));
   const totalEps = projects.reduce((sum, project) => sum + (Number(project.eps) || 0), 0);
   const totalDays = projects.reduce((sum, project) => sum + (Number(project.days) || 0), 0);
   const globalCost = projectCosts.reduce((acc, cost) => ({
@@ -34,7 +35,7 @@ export default function CurveTab() {
     rev: acc.rev + cost.rev,
     net: acc.net + cost.net,
   }), { aiCost: 0, hrCost: 0, fixCost: 0, scriptCost: 0, total: 0, rev: 0, net: 0 });
-  const selectedCost = p ? calcProjectCost(p, platforms, globalConfig, roles) : null;
+  const selectedCost = p ? calcProjectCost(p, platforms, globalConfig, roles, people) : null;
   const isGlobal = scope === 'global';
   const c = isGlobal ? globalCost : selectedCost;
   const analysisEps = isGlobal ? totalEps : (p?.eps || 0);
@@ -69,7 +70,7 @@ export default function CurveTab() {
     };
 
     for (let e = 1; e <= maxEp; e++) {
-      const cc = isGlobal ? calcScaledGlobalCost(e) : calcProjectCost({ ...p, eps: e }, platforms, globalConfig, roles);
+      const cc = isGlobal ? calcScaledGlobalCost(e) : calcProjectCost({ ...p, eps: e }, platforms, globalConfig, roles, people);
       labels.push(e);
       dTot.push(Math.round(cc.total / e));
       dAi.push(Math.round(cc.aiCost / e));

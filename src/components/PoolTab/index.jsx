@@ -5,9 +5,10 @@ export default function PoolTab() {
   const projects = useStore(s => s.projects);
   const platforms = useStore(s => s.platforms);
   const roles = useStore(s => s.roles);
+  const people = useStore(s => s.people);
   const globalConfig = useStore(s => s.globalConfig);
 
-  const costs = projects.map(p => calcProjectCost(p, platforms, globalConfig, roles));
+  const costs = projects.map(p => calcProjectCost(p, platforms, globalConfig, roles, people));
   const totalCost = costs.reduce((a, c) => a + c.total, 0);
   const totalRev = costs.reduce((a, c) => a + c.rev, 0);
   const net = totalRev - totalCost;
@@ -89,7 +90,11 @@ export default function PoolTab() {
                       <td style={{ padding: '5px 6px', color: '#888' }}>{r.name}</td>
                       {projects.map((p, pi) => {
                         const s = p.staffing?.find(x => x.roleName === r.name);
-                        const cost = s ? s.ratio * r.salary * (p.days / 30) : 0;
+                        const selectedPeople = (s?.peopleIds || []).map(id => people.find(person => person.id === id)).filter(Boolean);
+                        const avgSalary = selectedPeople.length > 0
+                          ? selectedPeople.reduce((sum, person) => sum + (Number(person.salary) > 0 ? Number(person.salary) : Number(r.salary || 0)), 0) / selectedPeople.length
+                          : Number(r.salary || 0);
+                        const cost = s ? s.ratio * avgSalary * (p.days / 30) : 0;
                         return (
                           <td key={pi} style={{ textAlign: 'right', padding: '5px 6px' }}>
                             {cost > 0 ? fmt(cost) : <span style={{ color: '#ccc' }}>—</span>}
@@ -102,7 +107,7 @@ export default function PoolTab() {
                     <td style={{ padding: '6px 6px' }}>人力合计</td>
                     {projects.map((p, pi) => (
                       <td key={pi} style={{ textAlign: 'right', padding: '6px 6px' }}>
-                        {fmt(calcProjectCost(p, platforms, globalConfig, roles).hrCost)}
+                        {fmt(calcProjectCost(p, platforms, globalConfig, roles, people).hrCost)}
                       </td>
                     ))}
                   </tr>

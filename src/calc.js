@@ -1,10 +1,29 @@
-export function calcProjectCost(p, platforms, globalConfig, roles) {
+function getSelectedPeople(staffing, people) {
+  const rolePeople = people.filter(person => person.roleName === staffing.roleName && (person.status || 'active') !== 'inactive');
+  const ids = staffing.peopleIds || [];
+  if (ids.length === 0) return rolePeople;
+  return ids.map(id => people.find(person => person.id === id)).filter(Boolean);
+}
+
+function getPersonSalary(person, role) {
+  return Number(person.salary) > 0 ? Number(person.salary) : (Number(role?.salary) || 0);
+}
+
+export function calcProjectCost(p, platforms, globalConfig, roles, people = []) {
   const plat = platforms.find(x => x.active) || platforms[0] || { rate: 100 };
   const ptsPerEp = calcEpisodePoints(globalConfig).totalPoints;
   const aiCost = plat.rate > 0 ? (ptsPerEp * p.eps) / plat.rate : 0;
   const months = p.days / 30;
   const hrCost = p.staffing && p.staffing.length > 0
-    ? p.staffing.reduce((a, s) => { const role = roles.find(r => r.name === s.roleName); return a + (role ? role.salary * s.ratio : 0) * months; }, 0)
+    ? p.staffing.reduce((a, s) => {
+      const role = roles.find(r => r.name === s.roleName);
+      const selectedPeople = getSelectedPeople(s, people);
+      if (selectedPeople.length > 0) {
+        const avgSalary = selectedPeople.reduce((sum, person) => sum + getPersonSalary(person, role), 0) / selectedPeople.length;
+        return a + avgSalary * (Number(s.ratio) || 0) * months;
+      }
+      return a + (role ? role.salary * s.ratio : 0) * months;
+    }, 0)
     : roles.reduce((a, r) => a + r.count * r.salary * months, 0);
   const fixCost = (globalConfig.cSoft + globalConfig.cServer) * months + globalConfig.cMisc;
   const scriptCost = p.scriptCost || 0;

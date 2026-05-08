@@ -37,6 +37,9 @@ const defaultState = {
   globalConfig: defaultGlobalConfig,
   projects: defaultProjects,
   templates: defaultTemplates,
+  people: [],
+  pointRecords: [],
+  productionProgress: {},
 };
 
 function migrateFromOldKeys() {
@@ -67,12 +70,18 @@ const useStore = create(
       globalConfig: migrated.globalConfig || defaultState.globalConfig,
       projects: migrated.projects || defaultState.projects,
       templates: migrated.templates || defaultState.templates,
+      people: defaultState.people,
+      pointRecords: defaultState.pointRecords,
+      productionProgress: defaultState.productionProgress,
 
       setPlatforms: (platforms) => set({ platforms }),
       setRoles: (roles) => set({ roles }),
       setGlobalConfig: (globalConfig) => set({ globalConfig }),
       setProjects: (projects) => set({ projects }),
       setTemplates: (templates) => set({ templates }),
+      setPeople: (people) => set({ people }),
+      setPointRecords: (pointRecords) => set({ pointRecords }),
+      setProductionProgress: (productionProgress) => set({ productionProgress }),
       resetStore: () => set(defaultState),
 
       updateProject: (index, patch) =>
@@ -98,12 +107,45 @@ const useStore = create(
       updateRole: (index, patch) =>
         set((state) => ({ roles: state.roles.map((r, i) => i === index ? { ...r, ...patch } : r) })),
 
+      addPerson: (person) =>
+        set((state) => ({ people: [...state.people, { ...person, id: person.id || `${Date.now()}-${Math.random().toString(16).slice(2)}` }] })),
+      deletePerson: (id) =>
+        set((state) => ({
+          people: state.people.filter((p) => p.id !== id),
+          projects: state.projects.map((project) => ({
+            ...project,
+            staffing: (project.staffing || []).map((row) => ({
+              ...row,
+              peopleIds: (row.peopleIds || []).filter((personId) => personId !== id),
+            })),
+          })),
+        })),
+      updatePerson: (id, patch) =>
+        set((state) => ({ people: state.people.map((p) => p.id === id ? { ...p, ...patch } : p) })),
+
       addTemplate: (template) =>
         set((state) => ({ templates: [...state.templates, template] })),
       deleteTemplate: (index) =>
         set((state) => ({ templates: state.templates.filter((_, i) => i !== index) })),
       updateTemplate: (index, patch) =>
         set((state) => ({ templates: state.templates.map((t, i) => i === index ? { ...t, ...patch } : t) })),
+
+      addPointRecords: (records) =>
+        set((state) => ({ pointRecords: [...records, ...state.pointRecords] })),
+      deletePointRecord: (id) =>
+        set((state) => ({ pointRecords: state.pointRecords.filter((r) => r.id !== id) })),
+      updatePointRecord: (id, patch) =>
+        set((state) => ({ pointRecords: state.pointRecords.map((r) => r.id === id ? { ...r, ...patch } : r) })),
+      updateProductionProgress: (projectName, patch) =>
+        set((state) => ({
+          productionProgress: {
+            ...state.productionProgress,
+            [projectName]: {
+              ...(state.productionProgress[projectName] || {}),
+              ...patch,
+            },
+          },
+        })),
     }),
     {
       name: "gleam_v4_store",
@@ -113,6 +155,9 @@ const useStore = create(
         globalConfig: state.globalConfig,
         projects: state.projects,
         templates: state.templates,
+        people: state.people,
+        pointRecords: state.pointRecords,
+        productionProgress: state.productionProgress,
       }),
     }
   )

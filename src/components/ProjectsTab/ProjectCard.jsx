@@ -8,9 +8,10 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
   const roles = useStore(s => s.roles);
   const templates = useStore(s => s.templates);
   const projects = useStore(s => s.projects);
+  const people = useStore(s => s.people);
   const [tplSel, setTplSel] = useState("");
 
-  const c = calcProjectCost(project, platforms, globalConfig, roles);
+  const c = calcProjectCost(project, platforms, globalConfig, roles, people);
 
   const globalDemand = {};
   projects.forEach(p => {
@@ -26,6 +27,18 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
     const newStaffing = [...project.staffing];
     newStaffing[idx] = { ...newStaffing[idx], ...patch };
     onUpdate({ staffing: newStaffing });
+  };
+
+  const toggleStaffingPerson = (idx, personId) => {
+    const row = project.staffing[idx] || {};
+    const rolePeople = people.filter(p => p.roleName === row.roleName && (p.status || 'active') !== 'inactive');
+    const peopleIds = Array.isArray(row.peopleIds) && row.peopleIds.length > 0
+      ? row.peopleIds
+      : rolePeople.map(p => p.id);
+    const nextPeopleIds = peopleIds.includes(personId)
+      ? peopleIds.filter(id => id !== personId)
+      : [...peopleIds, personId];
+    updateStaffing(idx, { peopleIds: nextPeopleIds });
   };
 
   const handleDelete = (e) => { e.stopPropagation(); if (confirm('删除项目「' + project.name + '」？')) onDelete(); };
@@ -86,14 +99,15 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
                 <button className="addbtn" onClick={() => onUpdate({ staffing: [...(project.staffing || []), { roleName: "编剧", ratio: 1 }] })}>+ 新增岗位</button>
               </div>
             </div>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>配置每个岗位的人力占用比例</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>配置每个岗位的人力占用比例，并选择该项目实际制作人员</div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: "1.5fr 55px 55px 65px 80px 28px", fontSize: 10, color: '#aaa', gap: 6, marginBottom: 4, paddingBottom: 6, borderBottom: '1px solid #e8e8e8' }}>
+            <div className="staffing-row staffing-hdr">
               <span>岗位名称</span>
               <span style={{ textAlign: 'center' }}>占用比例</span>
               <span style={{ textAlign: 'center' }}>公司人数</span>
               <span style={{ textAlign: 'center' }}>全项目占用</span>
               <span style={{ textAlign: 'center' }}>状态</span>
+              <span>项目人员</span>
               <span></span>
             </div>
 
@@ -104,6 +118,11 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
             {(project.staffing || []).map((s, sIdx) => {
               const role = roles.find(r => r.name === s.roleName);
               const count = role ? role.count : 0;
+              const rolePeople = people.filter(p => p.roleName === s.roleName && (p.status || 'active') !== 'inactive');
+              const selectedIds = Array.isArray(s.peopleIds) && s.peopleIds.length > 0
+                ? s.peopleIds
+                : rolePeople.map(p => p.id);
+              const selectedPeople = rolePeople.filter(p => selectedIds.includes(p.id));
               const globalRatio = count > 0 ? (globalDemand[s.roleName] || 0) / count : 0;
               const gDemandStr = (globalDemand[s.roleName] || 0).toFixed(2);
               let statusBadge, rowBg = {};
@@ -118,12 +137,32 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
                 statusBadge = <span className="badge b-green">充足 {Math.round(globalRatio * 100)}%</span>;
               }
               return (
-                <div key={sIdx} style={{ display: 'grid', gridTemplateColumns: "1.5fr 55px 55px 65px 80px 28px", gap: 6, alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #f0f0f0', ...rowBg }}>
+                <div key={sIdx} className="staffing-row" style={rowBg}>
                   <input className="si" list={dlId} value={s.roleName} onChange={e => updateStaffing(sIdx, { roleName: e.target.value })} />
                   <input className="si" type="number" step={0.1} min={0} value={s.ratio} onChange={e => updateStaffing(sIdx, { ratio: +e.target.value })} style={{ textAlign: 'center' }} />
                   <div style={{ fontSize: 12, textAlign: 'center', color: role ? '#1a1a1a' : '#854F0B' }}>{count > 0 ? count : '—'}</div>
                   <div style={{ fontSize: 12, textAlign: 'center', color: '#888' }}>{gDemandStr}</div>
                   <div style={{ textAlign: 'center' }}>{statusBadge}</div>
+                  <div className="staffing-people-picker">
+                    {rolePeople.length === 0 ? (
+                      <span style={{ fontSize: 11, color: '#aaa' }}>暂无人员</span>
+                    ) : (
+                      rolePeople.map(person => {
+                        const checked = selectedPeople.some(p => p.id === person.id);
+                        return (
+                          <button
+                            type="button"
+                            className={`person-chip${checked ? ' on' : ''}${person.status === 'busy' ? ' busy' : ''}`}
+                            key={person.id}
+                            onClick={() => toggleStaffingPerson(sIdx, person.id)}
+                            title={person.pointsAccount || person.note || person.name}
+                          >
+                            {person.name}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                   <button className="delbtn" onClick={() => onUpdate({ staffing: project.staffing.filter((_, si) => si !== sIdx) })}>×</button>
                 </div>
               );
