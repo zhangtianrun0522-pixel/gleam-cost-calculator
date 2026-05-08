@@ -10,6 +10,9 @@ function applyCloudData(data, setters) {
   if (data.globalConfig) setters.setGlobalConfig(data.globalConfig);
   if (data.projects) setters.setProjects(data.projects);
   if (Array.isArray(data.templates)) setters.setTemplates(data.templates);
+  if (Array.isArray(data.people)) setters.setPeople(data.people);
+  if (Array.isArray(data.pointRecords)) setters.setPointRecords(data.pointRecords);
+  if (data.productionProgress) setters.setProductionProgress(data.productionProgress);
 }
 
 const AUTH_INIT_TIMEOUT_MS = 4000;
@@ -43,11 +46,17 @@ export default function AuthGate({ children }) {
   const globalConfig = useStore((s) => s.globalConfig);
   const projects = useStore((s) => s.projects);
   const templates = useStore((s) => s.templates);
+  const people = useStore((s) => s.people);
+  const pointRecords = useStore((s) => s.pointRecords);
+  const productionProgress = useStore((s) => s.productionProgress);
   const setPlatforms = useStore((s) => s.setPlatforms);
   const setRoles = useStore((s) => s.setRoles);
   const setGlobalConfig = useStore((s) => s.setGlobalConfig);
   const setProjects = useStore((s) => s.setProjects);
   const setTemplates = useStore((s) => s.setTemplates);
+  const setPeople = useStore((s) => s.setPeople);
+  const setPointRecords = useStore((s) => s.setPointRecords);
+  const setProductionProgress = useStore((s) => s.setProductionProgress);
   const resetStore = useStore((s) => s.resetStore);
 
   const debounceRef = useRef(null);
@@ -72,7 +81,7 @@ export default function AuthGate({ children }) {
       return;
     } else {
       if (data) {
-        applyCloudData(data, { setPlatforms, setRoles, setGlobalConfig, setProjects, setTemplates });
+        applyCloudData(data, { setPlatforms, setRoles, setGlobalConfig, setProjects, setTemplates, setPeople, setPointRecords, setProductionProgress });
       } else {
         resetStore();
       }
@@ -159,11 +168,14 @@ export default function AuthGate({ children }) {
         globalConfig,
         projects,
         templates,
+        people,
+        pointRecords,
+        productionProgress,
       });
       setSyncStatus(error ? 'error' : 'saved');
     }, 1200);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [platforms, roles, globalConfig, projects, templates, user, dataReady]);
+  }, [platforms, roles, globalConfig, projects, templates, people, pointRecords, productionProgress, user, dataReady]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
