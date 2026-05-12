@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import useStore from '../../store';
-import { calcEpisodePoints, calcProjectPoints, fmt, fmtPoints } from '../../calc';
+import { calcEpisodePoints, calcProjectPoints, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 
 const emptyBatchRow = { personId: '', personName: '', roleName: '', plannedPoints: '', grantedPoints: '' };
 
@@ -27,7 +27,7 @@ export default function PointsPlanTab() {
   const [openBatchIds, setOpenBatchIds] = useState({});
   const reserveRate = Math.max(Number(reservePct) || 0, 0) / 100;
   const platform = platforms.find(p => p.active) || platforms[0] || { name: '未配置平台', rate: 0 };
-  const epPoints = calcEpisodePoints(globalConfig);
+  const globalEpPoints = calcEpisodePoints(globalConfig);
 
   const rows = useMemo(() => projects.map(project => ({
     project,
@@ -396,7 +396,7 @@ export default function PointsPlanTab() {
         <div className="g3">
           <div className="mc"><div className="ml">项目数</div><div className="mv">{projects.length}</div><div className="ms">个</div></div>
           <div className="mc"><div className="ml">总集数</div><div className="mv">{totalEps}</div><div className="ms">集</div></div>
-          <div className="mc"><div className="ml">单集积分</div><div className="mv">{fmtPoints(epPoints.totalPoints)}</div><div className="ms">视频 {fmtPoints(epPoints.videoPoints)} / 图像 {fmtPoints(epPoints.imagePoints)}</div></div>
+          <div className="mc"><div className="ml">默认单集积分</div><div className="mv">{fmtPoints(globalEpPoints.totalPoints)}</div><div className="ms">分镜 {fmtPoints(globalEpPoints.videoPoints)} / 图像 {fmtPoints(globalEpPoints.imagePoints)}</div></div>
         </div>
       </div>
 
@@ -540,13 +540,15 @@ export default function PointsPlanTab() {
         {rows.map(({ project, points }, idx) => {
           const staffing = project.staffing || [];
           const ratioTotal = staffing.reduce((sum, s) => sum + (Number(s.ratio) || 0), 0);
+          const projectEpPoints = calcEpisodePoints(getProjectAiConfig(project, globalConfig));
+          const configLabel = hasProjectAiOverrides(project) ? '项目配置' : '全局默认';
           return (
             <div className="points-project" key={`${project.name}-${idx}`}>
               <div className="points-project-main">
                 <div>
                   <div style={{ fontWeight: 500, fontSize: 14 }}>{project.name}</div>
                   <div style={{ fontSize: 11, color: '#999', marginTop: 3 }}>
-                    {points.eps}集 · 单集 {fmtPoints(epPoints.totalPoints)} · 预留 {reservePct}%
+                    {points.eps}集 · 单集 {fmtPoints(projectEpPoints.totalPoints)} · {configLabel} · 预留 {reservePct}%
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>

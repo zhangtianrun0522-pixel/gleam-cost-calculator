@@ -38,11 +38,18 @@
 - 新用户没有云端数据时重置到默认初始状态并自动建立该用户的数据；退出时清空当前 store，避免不同账号共享本地缓存。
 - 已补充 `src/sync.js` 对 `people`、`pointRecords`、`productionProgress` 的云端保存/读取；若线上表尚未执行新列迁移，会自动回退到旧字段同步，避免登录卡死。
 - 已新增 Supabase 迁移文件 `supabase/migrations/202605080830_add_points_ledger_columns.sql`，用于给 `user_data` 增加 `people`、`point_records`、`production_progress` 三个 JSONB 字段。
+- 已将 AI 积分口径升级为项目级可覆盖：全局配置作为默认值，项目可单独设置生成速率、每集成片时长、片比、图像积分/张、每集图像数量；旧项目没有 `aiConfig` 时继续继承全局默认。
+- 项目管理页已新增项目级 AI 积分配置面板；成本计算、积分计划、人员额度分配、项目积分明细和成本曲线已统一使用项目级 AI 配置。
+- 已将本地预览与进程管理注意事项写入项目 `AGENTS.md`：启动前检查残留进程和端口、固定项目端口、避免根目录多 HTML 入口、按顺序验证预览链路。
+- 已将同一套本地预览与进程管理注意事项同步到全局 `/Users/darius/AGENTS.md`，作为后续所有项目的默认开发纪律。
+- 已收敛当前项目 Vite 配置：固定 dev 端口 `127.0.0.1:5173`、preview 端口 `127.0.0.1:4173`，并限定 Vite 依赖扫描/构建入口为 `index.html`，避免根目录旧 HTML 被当作入口扫描。
+- 已按项目级积分口径调整配置入口：全局配置页移除“分镜积分配置”，项目管理页保留项目级 AI 积分配置，并补回“实际生成素材（成片 × 片比）→ 每集分镜积分”的说明条。
 
 ## 下一步
 - 后续新功能清单：组织邀请与权限管理。建议单独新分支 `codex/org-permissions`，先做组织/成员/邀请/部门/访问范围模型，再做 UI。
 - 组织权限 MVP：老板/Owner 可邀请邮箱加入组织；可设置成员角色（owner/admin/department_lead/viewer/member）和访问范围（global/department/project/self）；部门负责人是否看全局由老板配置。
 - 组织权限需要从个人 `user_data` 逐步升级为组织级数据，并配合 Supabase RLS 做真实数据隔离，不能只靠前端隐藏。
+- 后续优化清单：人工检查项目级 AI 积分配置在多项目下的展示和计算口径是否符合预期。
 - 使用本地预览服务人工检查：岗位二级人员管理、项目选人、积分计划从项目生成发放草稿、记录编辑删除与成本曲线全局分析展示。
 - 人工验证邮箱+密码注册、邮箱验证、密码登录、忘记密码重置，以及同邮箱再次登录后的数据恢复。
 - 后续若要做月度计划，需要先给项目补起止日期或月度制作量输入。
@@ -62,6 +69,9 @@
 - 项目中忙碌人员仍允许选择，只用浅色状态提示；是否禁止选择忙碌人员需要后续确认。
 - 成本曲线全局模式的“总集数变化”是假设 AI 成本随集数变化，人力/固定/脚本按当前项目组合固定投入摊销；这是用于全局规模感分析，不等价于精确排期预测。
 - 当前使用 Supabase 邮箱+密码认证；注册邮箱验证、忘记密码邮件和重定向依赖 Supabase Auth 配置。
+- 本轮 `npm run build` 两次卡在 Vite 构建阶段，已手动结束残留 npm/vite 进程；模块导入与核心计算验证通过，但完整生产构建需要后续在环境恢复后重跑。
+- 当前项目根目录仍存在旧版/临时 HTML 入口（如 `gleam-cost-calculator.html`、未跟踪的 `打开成本核算器.html`），Vite debug 会扫描这些入口；后续建议移入 `legacy/` 或 `archive/`。
+- 当前 in-app browser 自动导航仍可能超时，但项目生产构建和 `vite preview` 已可用；若浏览器继续卡住，优先重置浏览器会话或手动打开 `http://127.0.0.1:4173/`。
 
 ## 关键决策
 - 按工作区规则先建立项目级协作与进度文件，作为后续开发的状态锚点。
@@ -97,6 +107,10 @@
 - 认证门禁放在应用最外层，Header 只展示已登录用户和同步状态，避免未登录用户进入业务页。
 - 云端加载使用 `maybeSingle()`，新用户没有 `user_data` 行时不当作错误。
 - 注册使用 `signUp`，登录使用 `signInWithPassword`，忘记密码使用 `resetPasswordForEmail`；密码只由 Supabase Auth 处理，应用不保存、不比较密码。
+- 先做项目级 AI 积分配置，而不是组织权限：它直接影响当前积分计划、成本曲线和项目金额，是现有核算口径的阻塞优化；组织权限涉及组织级数据模型和 RLS，适合后续单独分支处理。
+- 项目级 AI 配置采用 `project.aiConfig` 小对象，不改 Supabase 表结构：项目本身已在 `projects` JSON 中云同步，可避免本轮引入数据库迁移。
+- 旧项目未设置 `aiConfig` 时继承全局默认；新项目复制创建时的全局默认，避免后续全局默认变动意外影响已新建项目测算口径。
+- 本地预览问题按开发环境基础设施处理，不视为业务功能设计缺失；优先制度化端口、进程、入口文件和验证顺序。
 
 ## 验证结果
 - `node -e "import('./src/calc.js').then(m=>console.log(m.fmt(12345)))"` 通过，输出 `¥1.2万`。
@@ -126,3 +140,9 @@
 - 调整临时人员发放逻辑后 `npm run build` 通过：92 modules transformed，耗时 1.12s；产物 `dist/assets/index-CRv9jGgm.js` 约 622.61 kB，仍有同类 chunk 大小警告。
 - 调整临时人员显示与保存后刷新草稿后 `npm run build` 通过：92 modules transformed，耗时 1.07s；产物 `dist/assets/index-Dy080neC.js` 约 622.65 kB，仍有同类 chunk 大小警告。
 - Supabase 新字段检查返回 `column user_data.people does not exist`，已新增迁移 SQL 并给前端同步增加缺列回退。
+- 项目级 AI 积分配置后，`node -e "import('./src/calc.js').then(...calcProjectPoints...)"` 通过，项目覆盖示例输出 `2,600积分`。
+- 本轮 `npm run build` 第一次无输出挂起，第二次停在 `transforming...` 超过 60 秒；已结束对应进程。完整 build 未完成，剩余风险是未获得 Vite 生产构建结果。
+- 修复预览配置后，`./node_modules/.bin/vite build --debug` 通过：92 modules transformed，产物 `dist/assets/index-Chj4W1SX.js` 约 626.59 kB，仍有 chunk 大小警告。
+- 当前 `npm run preview` 服务运行在 `http://127.0.0.1:4173/`，`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
+- 移除全局分镜积分配置 UI 并补回项目说明条后，`npm run build` 通过：92 modules transformed，耗时 1.03s；产物 `dist/assets/index-DLoPTHmL.js` 约 625.31 kB，仍有 chunk 大小警告。
+- 调整项目分镜积分说明条字体后，`npm run build` 通过：92 modules transformed，耗时 1.20s；产物 `dist/assets/index-B3y4qQsZ.js` 约 625.31 kB，仍有 chunk 大小警告。

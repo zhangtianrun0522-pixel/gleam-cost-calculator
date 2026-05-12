@@ -150,7 +150,7 @@ export default function CurveTab() {
       if (pieInst.current) { pieInst.current.destroy(); pieInst.current = null; }
       if (compInst.current) { compInst.current.destroy(); compInst.current = null; }
     };
-  }, [idx, scope, seriesVis, projects, platforms, roles, globalConfig, c, isGlobal, p, analysisEps, totalDays]);
+  }, [idx, scope, seriesVis, projects, platforms, roles, people, globalConfig, c, isGlobal, p, analysisEps, totalDays]);
 
   if (!projects.length || !c) return <div className="card" style={{ textAlign: 'center', color: '#aaa', padding: 20 }}>暂无项目，请先在「项目管理」中添加</div>;
 

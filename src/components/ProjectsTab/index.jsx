@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import useStore from '../../store';
+import { getProjectAiConfig } from '../../calc';
 import ProjectCard from './ProjectCard';
 
 export default function ProjectsTab() {
   const projects = useStore(s => s.projects);
+  const globalConfig = useStore(s => s.globalConfig);
   const addProject = useStore(s => s.addProject);
   const updateProject = useStore(s => s.updateProject);
   const deleteProject = useStore(s => s.deleteProject);
@@ -14,6 +16,7 @@ export default function ProjectsTab() {
     const p = {
       name: '新项目 ' + (projects.length + 1),
       eps: 20, days: 30, scriptCost: 0, staffing: [],
+      aiConfig: getProjectAiConfig(null, globalConfig),
       revPlat: 0, revBrand: 0, revLic: 0, revMerch: 0, revViews: 0, revCpm: 0,
     };
     addProject(p);

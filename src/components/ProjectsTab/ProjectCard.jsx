@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useStore from '../../store';
-import { calcProjectCost, fmt } from '../../calc';
+import { calcEpisodePoints, calcProjectCost, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 
 export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete }) {
   const platforms = useStore(s => s.platforms);
@@ -12,6 +12,18 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
   const [tplSel, setTplSel] = useState("");
 
   const c = calcProjectCost(project, platforms, globalConfig, roles, people);
+  const aiConfig = getProjectAiConfig(project, globalConfig);
+  const usesProjectAiConfig = hasProjectAiOverrides(project);
+  const epPoints = calcEpisodePoints(aiConfig);
+  const globalEpPoints = calcEpisodePoints(globalConfig);
+  const shotRatio = Number(aiConfig.shotRatio) || 1;
+  const aiDur = Number(aiConfig.aiDur) || 0;
+  const actualDur = Math.round(aiDur * shotRatio);
+  const updateAiConfig = (key, value) => {
+    onUpdate({ aiConfig: { ...(project.aiConfig || {}), [key]: value } });
+  };
+  const useProjectAiDefaults = () => onUpdate({ aiConfig: getProjectAiConfig(null, globalConfig) });
+  const resetProjectAiConfig = () => onUpdate({ aiConfig: null });
 
   const globalDemand = {};
   projects.forEach(p => {
@@ -82,6 +94,64 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
           <div className="fld" style={{ marginBottom: 10, maxWidth: 220 }}>
             <label>脚本外包费用（元）</label>
             <input className="si" type="number" value={project.scriptCost || 0} onChange={e => onUpdate({ scriptCost: +e.target.value })} />
+          </div>
+
+          <div className="project-ai-config">
+            <div className="project-ai-config-head">
+              <div>
+                <div className="stitle" style={{ margin: 0 }}>AI 积分配置</div>
+                <div className="project-ai-copy">
+                  {usesProjectAiConfig ? '当前项目使用独立积分口径' : '当前项目继承全局默认积分口径'}
+                </div>
+              </div>
+              <div className="project-ai-actions">
+                {usesProjectAiConfig ? (
+                  <button className="addbtn" type="button" onClick={resetProjectAiConfig}>恢复全局默认</button>
+                ) : (
+                  <button className="addbtn" type="button" onClick={useProjectAiDefaults}>启用项目配置</button>
+                )}
+              </div>
+            </div>
+            <div className="g3">
+              <div className="fld">
+                <label>生成速率（积分/s）</label>
+                <input className="si" type="number" step="0.5" disabled={!usesProjectAiConfig} value={aiConfig.aiRate ?? 0}
+                  onChange={e => updateAiConfig('aiRate', Number(e.target.value))} />
+              </div>
+              <div className="fld">
+                <label>每集成片时长（s）</label>
+                <input className="si" type="number" disabled={!usesProjectAiConfig} value={aiConfig.aiDur ?? 0}
+                  onChange={e => updateAiConfig('aiDur', Number(e.target.value))} />
+              </div>
+              <div className="fld">
+                <label>片比（成片 : 素材）</label>
+                <input className="si" type="number" step="0.1" min="1.0" disabled={!usesProjectAiConfig} value={aiConfig.shotRatio ?? 1}
+                  onChange={e => updateAiConfig('shotRatio', Math.round(Number(e.target.value) * 10) / 10)} />
+              </div>
+            </div>
+            <div className="project-shot-summary">
+              实际生成素材 <strong>{actualDur}s</strong>
+              <span>（成片 {aiDur}s × 片比 {shotRatio.toFixed(1)}）</span>
+              <span>→ 每集分镜积分 <strong>{Math.round(epPoints.videoPoints).toLocaleString()} 积分</strong></span>
+            </div>
+            <div className="g2 project-ai-image-row">
+              <div className="fld">
+                <label>图像积分/张</label>
+                <input className="si" type="number" disabled={!usesProjectAiConfig} value={aiConfig.aiImgPts ?? 0}
+                  onChange={e => updateAiConfig('aiImgPts', Number(e.target.value))} />
+              </div>
+              <div className="fld">
+                <label>每集图像数量（张）</label>
+                <input className="si" type="number" disabled={!usesProjectAiConfig} value={aiConfig.aiImgN ?? 0}
+                  onChange={e => updateAiConfig('aiImgN', Number(e.target.value))} />
+              </div>
+            </div>
+            <div className="project-ai-summary">
+              <span>单集 {fmtPoints(epPoints.totalPoints)}</span>
+              <span>分镜 {fmtPoints(epPoints.videoPoints)}</span>
+              <span>图像 {fmtPoints(epPoints.imagePoints)}</span>
+              {!usesProjectAiConfig && <span>全局默认单集 {fmtPoints(globalEpPoints.totalPoints)}</span>}
+            </div>
           </div>
 
           <div style={{ marginBottom: 10 }}>

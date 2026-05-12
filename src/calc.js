@@ -9,9 +9,26 @@ function getPersonSalary(person, role) {
   return Number(person.salary) > 0 ? Number(person.salary) : (Number(role?.salary) || 0);
 }
 
+const aiPointKeys = ['aiRate', 'aiDur', 'shotRatio', 'aiImgPts', 'aiImgN'];
+
+export function getProjectAiConfig(project, globalConfig) {
+  const overrides = project?.aiConfig || {};
+  return aiPointKeys.reduce((config, key) => {
+    const value = overrides[key];
+    if (value === '' || value === null || value === undefined) return config;
+    return { ...config, [key]: Number(value) };
+  }, { ...globalConfig });
+}
+
+export function hasProjectAiOverrides(project) {
+  const overrides = project?.aiConfig || {};
+  return aiPointKeys.some(key => overrides[key] !== '' && overrides[key] !== null && overrides[key] !== undefined);
+}
+
 export function calcProjectCost(p, platforms, globalConfig, roles, people = []) {
   const plat = platforms.find(x => x.active) || platforms[0] || { rate: 100 };
-  const ptsPerEp = calcEpisodePoints(globalConfig).totalPoints;
+  const projectAiConfig = getProjectAiConfig(p, globalConfig);
+  const ptsPerEp = calcEpisodePoints(projectAiConfig).totalPoints;
   const aiCost = plat.rate > 0 ? (ptsPerEp * p.eps) / plat.rate : 0;
   const months = p.days / 30;
   const hrCost = p.staffing && p.staffing.length > 0
@@ -40,7 +57,8 @@ export function calcEpisodePoints(globalConfig) {
 }
 
 export function calcProjectPoints(p, globalConfig, reserveRate = 0) {
-  const ep = calcEpisodePoints(globalConfig);
+  const projectAiConfig = getProjectAiConfig(p, globalConfig);
+  const ep = calcEpisodePoints(projectAiConfig);
   const eps = Math.max(Number(p.eps) || 0, 0);
   const videoPoints = ep.videoPoints * eps;
   const imagePoints = ep.imagePoints * eps;
