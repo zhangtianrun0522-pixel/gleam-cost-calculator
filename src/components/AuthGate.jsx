@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import supabase from '../supabase';
 import useStore from '../store';
-import { getWriteAccess, loadLegacyUserData, loadOrgContext, loadOrgData, saveOrgData, saveToCloud } from '../sync';
+import { getWriteAccess, loadLegacyUserData, loadOrgContext, loadOrgData, saveOrgData, saveScopedOrgData, saveToCloud } from '../sync';
 
 function applyCloudData(data, setters) {
   if (!data) return;
@@ -212,7 +212,7 @@ export default function AuthGate({ children }) {
   useEffect(() => {
     if (!user || !dataReady || userIdRef.current !== user.id || !orgContext?.organization?.id) return;
     const access = getWriteAccess(orgContext.member);
-    if (!access.canWriteGlobal) return;
+    if (!access.canWriteAny) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSyncStatus('syncing');
     debounceRef.current = setTimeout(async () => {
@@ -229,7 +229,9 @@ export default function AuthGate({ children }) {
       };
       const { error } = orgContext.legacyMode
         ? await saveToCloud(supabase, user.id, payload)
-        : await saveOrgData(supabase, orgContext.organization.id, payload);
+        : access.canWriteGlobal
+          ? await saveOrgData(supabase, orgContext.organization.id, payload)
+          : await saveScopedOrgData(supabase, orgContext.organization.id, payload);
       setSyncStatus(error ? 'error' : 'saved');
     }, 1200);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };

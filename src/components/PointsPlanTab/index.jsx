@@ -17,7 +17,7 @@ export default function PointsPlanTab() {
   const productionProgress = useStore(s => s.productionProgress);
   const updateProductionProgress = useStore(s => s.updateProductionProgress);
   const orgContext = useStore(s => s.orgContext);
-  const canWrite = getWriteAccess(orgContext?.member).canWriteGlobal;
+  const canWrite = getWriteAccess(orgContext?.member).canWriteAny;
 
   const [reservePct, setReservePct] = useState(20);
   const [batchName, setBatchName] = useState('');

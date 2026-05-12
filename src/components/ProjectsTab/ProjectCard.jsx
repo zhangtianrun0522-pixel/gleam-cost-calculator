@@ -2,7 +2,7 @@ import { useState } from 'react';
 import useStore from '../../store';
 import { calcEpisodePoints, calcProjectCost, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 
-export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true, departments = [] }) {
+export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true, canDelete = true, departments = [] }) {
   const platforms = useStore(s => s.platforms);
   const globalConfig = useStore(s => s.globalConfig);
   const roles = useStore(s => s.roles);
@@ -57,7 +57,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
     updateStaffing(idx, { peopleIds: nextPeopleIds });
   };
 
-  const handleDelete = (e) => { e.stopPropagation(); if (!canWrite) return; if (confirm('删除项目「' + project.name + '」？')) onDelete(); };
+  const handleDelete = (e) => { e.stopPropagation(); if (!canDelete) return; if (confirm('删除项目「' + project.name + '」？')) onDelete(); };
 
   return (
     <div className={`proj-card${isOpen ? " open" : ""}`}>
@@ -76,7 +76,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
             {c.net >= 0 ? "+" : ""}{fmt(c.net)}
           </span>
           <span style={{ fontSize: 12, color: '#bbb' }}>{isOpen ? '▲' : '▼'}</span>
-          <button className="delbtn" onClick={handleDelete} disabled={!canWrite}>×</button>
+          <button className="delbtn" onClick={handleDelete} disabled={!canDelete}>×</button>
         </div>
       </div>
 

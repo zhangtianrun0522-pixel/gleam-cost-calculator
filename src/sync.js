@@ -471,6 +471,42 @@ export async function saveOrgData(supabase, organizationId, state) {
   }
 }
 
+export async function saveScopedOrgData(supabase, organizationId, state) {
+  try {
+    const projects = normalizeProjects(state.projects || []);
+    const projectNameToId = new Map(projects.map((project) => [project.name, project.id]));
+    const personNameToId = new Map((state.people || []).map((person) => [person.name, person.id]));
+    const projectRows = projects.map((project, index) => toProjectRow(organizationId, project, index));
+    const recordRows = (state.pointRecords || []).map((record, index) =>
+      toPointRecordRow(organizationId, record, index, projectNameToId, personNameToId)
+    );
+    const progressRows = Object.entries(state.productionProgress || {}).map(([projectName, progress]) => ({
+      organization_id: organizationId,
+      project_id: progress?.projectId || projectNameToId.get(projectName) || projectName,
+      data: progress || {},
+      updated_at: new Date().toISOString(),
+    }));
+
+    const writes = [];
+    if (projectRows.length) {
+      writes.push(supabase.from(ORG_TABLES.projects).upsert(projectRows, { onConflict: 'organization_id,id' }));
+    }
+    if (recordRows.length) {
+      writes.push(supabase.from(ORG_TABLES.pointRecords).upsert(recordRows, { onConflict: 'organization_id,id' }));
+    }
+    if (progressRows.length) {
+      writes.push(supabase.from(ORG_TABLES.progress).upsert(progressRows, { onConflict: 'organization_id,project_id' }));
+    }
+
+    const results = await Promise.all(writes);
+    const error = results.find((res) => res.error)?.error;
+    if (error) return { error };
+    return { error: null };
+  } catch (err) {
+    return { error: err };
+  }
+}
+
 export async function loadOrgAdminData(supabase, organizationId) {
   const [departmentsRes, membersRes, invitesRes] = await Promise.all([
     supabase.from(ORG_TABLES.departments).select('*').eq('organization_id', organizationId).order('created_at', { ascending: true }),
