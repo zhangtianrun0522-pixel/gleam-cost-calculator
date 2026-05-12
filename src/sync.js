@@ -295,17 +295,29 @@ export async function loadOrgContext(supabase, user) {
       };
     }
 
-    const orgName = user.user_metadata?.team_name || (email ? `${email.split('@')[0]} 的组织` : '我的组织');
-    const { data: organization, error: orgError } = await supabase
+    let { data: ownedOrgs, error: ownedOrgError } = await supabase
       .from(ORG_TABLES.organizations)
-      .insert({ name: orgName, owner_id: user.id })
-      .select()
-      .single();
-    if (orgError) return { data: null, error: orgError };
+      .select('*')
+      .eq('owner_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (ownedOrgError) return { data: null, error: ownedOrgError };
+
+    let organization = ownedOrgs?.[0] || null;
+    if (!organization) {
+      const orgName = user.user_metadata?.team_name || (email ? `${email.split('@')[0]} 的组织` : '我的组织');
+      const { data: createdOrg, error: orgError } = await supabase
+        .from(ORG_TABLES.organizations)
+        .insert({ name: orgName, owner_id: user.id })
+        .select()
+        .single();
+      if (orgError) return { data: null, error: orgError };
+      organization = createdOrg;
+    }
 
     const { data: ownerMember, error: ownerError } = await supabase
       .from(ORG_TABLES.members)
-      .insert({
+      .upsert({
         organization_id: organization.id,
         user_id: user.id,
         email,
@@ -313,7 +325,7 @@ export async function loadOrgContext(supabase, user) {
         role: 'owner',
         access_scope: 'global',
         status: 'active',
-      })
+      }, { onConflict: 'organization_id,user_id' })
       .select()
       .single();
     if (ownerError) return { data: null, error: ownerError };
