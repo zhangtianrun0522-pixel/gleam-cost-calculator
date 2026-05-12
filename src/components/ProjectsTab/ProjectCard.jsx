@@ -2,7 +2,7 @@ import { useState } from 'react';
 import useStore from '../../store';
 import { calcEpisodePoints, calcProjectCost, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 
-export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true }) {
+export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true, departments = [] }) {
   const platforms = useStore(s => s.platforms);
   const globalConfig = useStore(s => s.globalConfig);
   const roles = useStore(s => s.roles);
@@ -19,6 +19,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
   const shotRatio = Number(aiConfig.shotRatio) || 1;
   const aiDur = Number(aiConfig.aiDur) || 0;
   const actualDur = Math.round(aiDur * shotRatio);
+  const department = departments.find(item => item.id === project.departmentId);
   const updateAiConfig = (key, value) => {
     if (!canWrite) return;
     onUpdate({ aiConfig: { ...(project.aiConfig || {}), [key]: value } });
@@ -67,6 +68,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <strong style={{ fontSize: 14 }}>{project.name}</strong>
           <span className="badge b-gray">{project.eps}集 · {project.days}天</span>
+          <span className="badge b-blue">{department?.name || '未分部门'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="badge b-amber">{fmt(c.total)}</span>
@@ -86,9 +88,18 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
               <input className="si" value={project.name} disabled={!canWrite} onChange={e => onUpdate({ name: e.target.value })} />
             </div>
             <div className="fld">
+              <label>所属部门</label>
+              <select className="si" value={project.departmentId || ''} disabled={!canWrite} onChange={e => onUpdate({ departmentId: e.target.value })}>
+                <option value="">未分部门</option>
+                {departments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </div>
+            <div className="fld">
               <label>总集数</label>
               <input className="si" type="number" value={project.eps} disabled={!canWrite} onChange={e => onUpdate({ eps: Math.max(1, +e.target.value) })} />
             </div>
+          </div>
+          <div className="g3" style={{ marginBottom: 10 }}>
             <div className="fld">
               <label>制作周期（天）</label>
               <input className="si" type="number" value={project.days} disabled={!canWrite} onChange={e => onUpdate({ days: Math.max(1, +e.target.value) })} />

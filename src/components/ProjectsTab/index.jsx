@@ -6,6 +6,7 @@ import { getWriteAccess } from '../../sync';
 
 export default function ProjectsTab() {
   const projects = useStore(s => s.projects);
+  const departments = useStore(s => s.departments);
   const globalConfig = useStore(s => s.globalConfig);
   const addProject = useStore(s => s.addProject);
   const updateProject = useStore(s => s.updateProject);
@@ -20,6 +21,7 @@ export default function ProjectsTab() {
     const p = {
       name: '新项目 ' + (projects.length + 1),
       eps: 20, days: 30, scriptCost: 0, staffing: [],
+      departmentId: departments[0]?.id || '',
       aiConfig: getProjectAiConfig(null, globalConfig),
       revPlat: 0, revBrand: 0, revLic: 0, revMerch: 0, revViews: 0, revCpm: 0,
     };
@@ -47,6 +49,7 @@ export default function ProjectsTab() {
           onUpdate={(patch) => canWrite && updateProject(i, patch)}
           onDelete={() => { if (!canWrite) return; deleteProject(i); if (openIndex === i) setOpenIndex(-1); }}
           canWrite={canWrite}
+          departments={departments}
         />
       ))}
     </div>

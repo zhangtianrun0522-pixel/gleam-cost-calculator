@@ -117,7 +117,8 @@ export function filterStateByMember(state, member) {
   const visiblePersonIds = new Set(visiblePeople.map((person) => person.id));
 
   const visibleProjects = (state.projects || []).filter((project) => {
-    if (scope === 'project' && projectIds.has(project.id)) return true;
+    const projectId = project.id || project.name;
+    if (scope === 'project' && (projectIds.has(projectId) || projectIds.has(project.name))) return true;
     if (scope === 'department' && project.departmentId && departmentIds.has(project.departmentId)) return true;
     if (scope === 'self') {
       return (project.staffing || []).some((row) =>
@@ -126,7 +127,7 @@ export function filterStateByMember(state, member) {
     }
     return false;
   });
-  const visibleProjectIds = new Set(visibleProjects.map((project) => project.id));
+  const visibleProjectIds = new Set(visibleProjects.flatMap((project) => [project.id, project.name].filter(Boolean)));
   const visibleProjectNames = new Set(visibleProjects.map((project) => project.name));
 
   return {
@@ -348,7 +349,7 @@ export async function loadOrgContext(supabase, user) {
 
 export async function loadOrgData(supabase, organizationId, member) {
   try {
-    const [configRes, projectsRes, peopleRes, recordsRes, progressRes, departmentsRes, membersRes, invitesRes] = await Promise.all([
+    const [configRes, projectsRes, peopleRes, recordsRes, progressRes, departmentsRes, membersRes] = await Promise.all([
       supabase.from(ORG_TABLES.configs).select('*').eq('organization_id', organizationId).maybeSingle(),
       supabase.from(ORG_TABLES.projects).select('*').eq('organization_id', organizationId),
       supabase.from(ORG_TABLES.people).select('*').eq('organization_id', organizationId),
@@ -356,8 +357,11 @@ export async function loadOrgData(supabase, organizationId, member) {
       supabase.from(ORG_TABLES.progress).select('*').eq('organization_id', organizationId),
       supabase.from(ORG_TABLES.departments).select('*').eq('organization_id', organizationId).order('created_at', { ascending: true }),
       supabase.from(ORG_TABLES.members).select('*').eq('organization_id', organizationId).order('created_at', { ascending: true }),
-      supabase.from(ORG_TABLES.invites).select('*').eq('organization_id', organizationId).order('created_at', { ascending: false }),
     ]);
+
+    const invitesRes = getWriteAccess(member).canManageOrg
+      ? await supabase.from(ORG_TABLES.invites).select('*').eq('organization_id', organizationId).order('created_at', { ascending: false })
+      : { data: [], error: null };
 
     const error = [configRes, projectsRes, peopleRes, recordsRes, progressRes, departmentsRes, membersRes, invitesRes].find((res) => res.error)?.error;
     if (error) return { data: null, error };
@@ -412,9 +416,14 @@ export async function saveOrgData(supabase, organizationId, state) {
   try {
     const projects = normalizeProjects(state.projects || []);
     const people = normalizePeople(state.people || []);
-    const projectNameToId = new Map(projects.map((project) => [project.name, project.id]));
+    const projectsWithDepartments = projects.map((project, index) => ({
+      ...project,
+      departmentId: project.departmentId || state.departments?.[0]?.id || '',
+      id: getProjectId(project, index),
+    }));
+    const projectNameToId = new Map(projectsWithDepartments.map((project) => [project.name, project.id]));
     const personNameToId = new Map(people.map((person) => [person.name, person.id]));
-    const projectRows = projects.map((project, index) => toProjectRow(organizationId, project, index));
+    const projectRows = projectsWithDepartments.map((project, index) => toProjectRow(organizationId, project, index));
     const peopleRows = people.map((person, index) => toPersonRow(organizationId, person, index));
     const recordRows = (state.pointRecords || []).map((record, index) =>
       toPointRecordRow(organizationId, record, index, projectNameToId, personNameToId)

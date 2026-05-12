@@ -225,6 +225,7 @@ export default function AuthGate({ children }) {
         people,
         pointRecords,
         productionProgress,
+        departments: useStore.getState().departments,
       };
       const { error } = orgContext.legacyMode
         ? await saveToCloud(supabase, user.id, payload)
