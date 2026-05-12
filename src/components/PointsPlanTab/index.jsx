@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import useStore from '../../store';
 import { calcEpisodePoints, calcProjectPoints, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
+import { getWriteAccess } from '../../sync';
 
 const emptyBatchRow = { personId: '', personName: '', roleName: '', plannedPoints: '', grantedPoints: '' };
 
@@ -15,6 +16,8 @@ export default function PointsPlanTab() {
   const deletePointRecord = useStore(s => s.deletePointRecord);
   const productionProgress = useStore(s => s.productionProgress);
   const updateProductionProgress = useStore(s => s.updateProductionProgress);
+  const orgContext = useStore(s => s.orgContext);
+  const canWrite = getWriteAccess(orgContext?.member).canWriteGlobal;
 
   const [reservePct, setReservePct] = useState(20);
   const [batchName, setBatchName] = useState('');
@@ -240,6 +243,7 @@ export default function PointsPlanTab() {
 
   const submitBatch = (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     const cleanRows = batchRows
       .map((row) => ({
         personId: row.personId || '',
@@ -309,6 +313,7 @@ export default function PointsPlanTab() {
         <div className="mc"><div className="ml">总申请积分</div><div className="mv">{fmtPoints(totalPoints)}</div><div className="ms">所有项目全集</div></div>
         <div className="mc"><div className="ml">预计金额</div><div className="mv bad">{fmt(estimatedCost)}</div><div className="ms">{platform.name} · {platform.rate || 0}积分/元</div></div>
       </div>
+      {!canWrite && <div className="readonly-note">当前账号没有积分记录写权限，此页仅用于查看授权范围内的数据。</div>}
 
       <div className="points-dashboard-list">
         {projects.length === 0 ? (
@@ -355,6 +360,7 @@ export default function PointsPlanTab() {
                     max={dashboard.eps || 0}
                     value={productionProgress[project.name]?.actualEpisode ?? ''}
                     placeholder="填写集数"
+                    disabled={!canWrite}
                     onChange={e => updateProductionProgress(project.name, { actualEpisode: Math.max(Number(e.target.value) || 0, 0) })}
                   />
                 </div>
@@ -431,7 +437,7 @@ export default function PointsPlanTab() {
               <span>先在项目管理中套模板并选择具体人员</span>
             )}
           </div>
-          <button type="button" className="addbtn points-save-btn" onClick={generateBatchFromProject} disabled={!issueProject}>
+          <button type="button" className="addbtn points-save-btn" onClick={generateBatchFromProject} disabled={!issueProject || !canWrite}>
             生成发放草稿
           </button>
         </div>
@@ -440,15 +446,15 @@ export default function PointsPlanTab() {
           <div className="points-batch-meta">
             <div className="fld">
               <label>批次名称</label>
-              <input value={batchName} placeholder="例如：5月第一批" onChange={e => setBatchName(e.target.value)} />
+              <input value={batchName} disabled={!canWrite} placeholder="例如：5月第一批" onChange={e => setBatchName(e.target.value)} />
             </div>
             <div className="fld">
               <label>日期</label>
-              <input type="date" value={batchDate} onChange={e => setBatchDate(e.target.value)} />
+              <input type="date" value={batchDate} disabled={!canWrite} onChange={e => setBatchDate(e.target.value)} />
             </div>
             <div className="fld">
               <label>关联项目</label>
-              <select value={batchProject} onChange={e => setBatchProject(e.target.value)}>
+              <select value={batchProject} disabled={!canWrite} onChange={e => setBatchProject(e.target.value)}>
                 <option value="">不指定项目</option>
                 {projects.map((p, idx) => <option key={`${p.name}-${idx}`} value={p.name}>{p.name}</option>)}
               </select>
@@ -465,26 +471,26 @@ export default function PointsPlanTab() {
           </div>
           {batchRows.map((row, idx) => (
             <div className="points-batch-row" key={idx}>
-              <input className="si" value={row.personName} placeholder="姓名/账号" onChange={e => updateBatchRow(idx, { personName: e.target.value })} />
-              <input className="si" value={row.roleName} placeholder="岗位" onChange={e => updateBatchRow(idx, { roleName: e.target.value })} />
+              <input className="si" value={row.personName} disabled={!canWrite} placeholder="姓名/账号" onChange={e => updateBatchRow(idx, { personName: e.target.value })} />
+              <input className="si" value={row.roleName} disabled={!canWrite} placeholder="岗位" onChange={e => updateBatchRow(idx, { roleName: e.target.value })} />
               <div className="points-plan-cell">
                 {row.isTemporary ? '/' : fmtPoints(Number(row.plannedPoints) || 0)}
               </div>
-              <input className="si" type="number" min="0" value={row.grantedPoints} placeholder="积分" onChange={e => updateBatchRow(idx, { grantedPoints: e.target.value })} />
+              <input className="si" type="number" min="0" value={row.grantedPoints} disabled={!canWrite} placeholder="积分" onChange={e => updateBatchRow(idx, { grantedPoints: e.target.value })} />
               <div className={`points-used-cell ${getRowLimitClass(row)}`}>{fmtPoints(getRowCumulativeIssued(row))}</div>
-              <button type="button" className="delbtn" onClick={() => removeBatchRow(idx)}>×</button>
+              <button type="button" className="delbtn" disabled={!canWrite} onClick={() => removeBatchRow(idx)}>×</button>
             </div>
           ))}
 
           <div className="points-batch-actions">
-            <input className="si" value={batchNote} placeholder="备注：用途、审批单、平台账号等" onChange={e => setBatchNote(e.target.value)} />
-            <select className="si" value={extraPersonId} onChange={e => { setExtraPersonId(e.target.value); addExtraPerson(e.target.value); }}>
+            <input className="si" value={batchNote} disabled={!canWrite} placeholder="备注：用途、审批单、平台账号等" onChange={e => setBatchNote(e.target.value)} />
+            <select className="si" value={extraPersonId} disabled={!canWrite} onChange={e => { setExtraPersonId(e.target.value); addExtraPerson(e.target.value); }}>
               <option value="">添加临时人员</option>
               {selectableExtraPeople.map(person => (
                 <option key={person.id} value={person.id}>{person.name} · {person.roleName}</option>
               ))}
             </select>
-            <button className="addbtn points-save-btn" type="submit">保存批次</button>
+            <button className="addbtn points-save-btn" type="submit" disabled={!canWrite}>保存批次</button>
           </div>
         </form>
       </div>
@@ -631,13 +637,13 @@ export default function PointsPlanTab() {
                         <div className="points-ledger-edit">
                           <div className="fld">
                             <label>单次发放</label>
-                            <input className="si" type="number" min="0" value={record.grantedPoints} onChange={e => updatePointRecord(record.id, { grantedPoints: Math.max(Number(e.target.value) || 0, 0), usedPoints: Math.max(Number(e.target.value) || 0, 0) })} />
+                            <input className="si" type="number" min="0" value={record.grantedPoints} disabled={!canWrite} onChange={e => updatePointRecord(record.id, { grantedPoints: Math.max(Number(e.target.value) || 0, 0), usedPoints: Math.max(Number(e.target.value) || 0, 0) })} />
                           </div>
                           <div className="fld">
                             <label>已使用</label>
-                            <input className="si" type="number" min="0" value={record.usedPoints} onChange={e => updatePointRecord(record.id, { usedPoints: Math.max(Number(e.target.value) || 0, 0) })} />
+                            <input className="si" type="number" min="0" value={record.usedPoints} disabled={!canWrite} onChange={e => updatePointRecord(record.id, { usedPoints: Math.max(Number(e.target.value) || 0, 0) })} />
                           </div>
-                          <button className="delbtn" onClick={() => { if (confirm('删除这条积分记录？')) deletePointRecord(record.id); }}>×</button>
+                          <button className="delbtn" disabled={!canWrite} onClick={() => { if (confirm('删除这条积分记录？')) deletePointRecord(record.id); }}>×</button>
                         </div>
                       </div>
                     ))}

@@ -7,6 +7,8 @@
 本轮新增总积分计划视角：按所有项目全集数汇总积分需求，按项目 staffing ratio 自动拆分到人员/岗位；新增岗位二级人员库、项目具体制作组名单、批次化积分发放/使用记录和人员额度汇总；成本曲线新增全局汇总/单项目分析切换；认证改为登录/注册门禁并按 Supabase 用户同步数据；暂不做月度拆分。
 
 ## 当前状态
+- 已从当前功能分支切出 `codex/org-permissions`，准备实现组织邀请与权限管理 MVP。
+- `打开成本核算器.html` 确认为本地直接打开网站的快捷方式，本轮不纳入功能改动。
 - 已确认当前项目目录与仓库根目录一致。
 - 已补充项目级 `AGENTS.md` 与 `Progress.md`。
 - 技术栈：Vite + React 18 + Zustand + Chart.js + Supabase。
@@ -44,11 +46,14 @@
 - 已将同一套本地预览与进程管理注意事项同步到全局 `/Users/darius/AGENTS.md`，作为后续所有项目的默认开发纪律。
 - 已收敛当前项目 Vite 配置：固定 dev 端口 `127.0.0.1:5173`、preview 端口 `127.0.0.1:4173`，并限定 Vite 依赖扫描/构建入口为 `index.html`，避免根目录旧 HTML 被当作入口扫描。
 - 已按项目级积分口径调整配置入口：全局配置页移除“分镜积分配置”，项目管理页保留项目级 AI 积分配置，并补回“实际生成素材（成片 × 片比）→ 每集分镜积分”的说明条。
+- 已新增组织权限迁移草案：组织、成员、邀请、部门、组织配置、项目、人员、积分记录和制作进度表，并启用 RLS。
+- 已新增组织同步模块：登录后解析/创建组织、自动接受邮箱邀请、老 `user_data` 迁移为组织数据、按成员范围加载数据。
+- 已新增“组织管理”Tab：Owner/Admin 可维护部门、邀请成员、调整成员角色和访问范围。
+- 已在 Header 展示当前组织和角色，并在无全局写权限时禁用全局配置、项目、积分记录的主要编辑入口。
 
 ## 下一步
-- 后续新功能清单：组织邀请与权限管理。建议单独新分支 `codex/org-permissions`，先做组织/成员/邀请/部门/访问范围模型，再做 UI。
-- 组织权限 MVP：老板/Owner 可邀请邮箱加入组织；可设置成员角色（owner/admin/department_lead/viewer/member）和访问范围（global/department/project/self）；部门负责人是否看全局由老板配置。
-- 组织权限需要从个人 `user_data` 逐步升级为组织级数据，并配合 Supabase RLS 做真实数据隔离，不能只靠前端隐藏。
+- 继续收敛组织权限 MVP：跑构建、检查 RLS SQL 可执行性，并用 Supabase 真实环境验证老用户迁移、Owner 邀请、受邀邮箱自动加入、成员范围过滤。
+- 后续需要将 department_lead 的写入从“整体保存”升级为行级保存，避免 scoped 成员保存时覆盖不可见数据；当前前端先禁用非 Owner/Admin 写入口。
 - 后续优化清单：人工检查项目级 AI 积分配置在多项目下的展示和计算口径是否符合预期。
 - 使用本地预览服务人工检查：岗位二级人员管理、项目选人、积分计划从项目生成发放草稿、记录编辑删除与成本曲线全局分析展示。
 - 人工验证邮箱+密码注册、邮箱验证、密码登录、忘记密码重置，以及同邮箱再次登录后的数据恢复。
@@ -146,3 +151,14 @@
 - 当前 `npm run preview` 服务运行在 `http://127.0.0.1:4173/`，`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
 - 移除全局分镜积分配置 UI 并补回项目说明条后，`npm run build` 通过：92 modules transformed，耗时 1.03s；产物 `dist/assets/index-DLoPTHmL.js` 约 625.31 kB，仍有 chunk 大小警告。
 - 调整项目分镜积分说明条字体后，`npm run build` 通过：92 modules transformed，耗时 1.20s；产物 `dist/assets/index-B3y4qQsZ.js` 约 625.31 kB，仍有 chunk 大小警告。
+- 组织邀请与权限管理 MVP 前端构建通过：`npm run build`，93 modules transformed，耗时 909ms；产物 `dist/assets/index-DC55gY-S.js` 约 643.10 kB，仍有 chunk 大小警告。
+- `node -e "import('./src/sync.js').then(...)"` 通过，确认组织同步相关导出可正常导入。
+- AuthGate 加载顺序修正后再次 `npm run build` 通过：93 modules transformed，耗时 1.10s；产物 `dist/assets/index-BfjWHOjR.js` 约 643.11 kB，仍有 chunk 大小警告。
+- 本地预览验证：`lsof -nP -iTCP -sTCP:LISTEN` 未发现 4173/5173 占用；`npm run preview` 启动在 `http://127.0.0.1:4173/`，`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。`ps` 检查因系统权限返回 `operation not permitted`。
+- 修复“网页打不开”：确认本地 preview 被停止导致 4173 无监听，已重新启动 `npm run preview` 到 `http://127.0.0.1:4173/`；同时为未执行组织权限迁移的 Supabase 环境增加旧 `user_data` 兼容回退，避免新表不存在时登录同步失败。
+- 兼容回退后 `npm run build` 通过：93 modules transformed，耗时 951ms；产物 `dist/assets/index-CTBu8enA.js` 约 644.76 kB，仍有 chunk 大小警告；`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
+- 修复组织权限不可见：`resetStore()` 会清空 `orgContext`，导致 Owner/Admin 被误判为无权限；已调整为 reset 后重新写入组织上下文。`npm run build` 通过：93 modules transformed，耗时 935ms；`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
+- 组织成员细节补齐：成员栏显示用户名/邮箱、绑定人员、部门和角色；人员库新增“对应成员”下拉用于把具体人员绑定到组织成员；组织管理顶部支持当前用户修改自己的用户名。
+- 成员细节补齐后 `npm run build` 通过：93 modules transformed，耗时 904ms；产物 `dist/assets/index-nCoLx1Io.js` 约 646.70 kB，仍有 chunk 大小警告；`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
+- 根据产品口径调整成员栏：组织成员是注册管理账号维度，不再联动制作人员库；已移除人员库“对应成员”下拉，成员栏改为展示注册成员、部门和角色。`npm run build` 通过：93 modules transformed，耗时 942ms；`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
+- 修复新增部门交互：空输入时默认创建“新部门 N”，按钮点击后立即乐观显示部门并给出状态提示；兼容模式下本地新增，Supabase 写入失败时回滚并显示错误。`npm run build` 通过：93 modules transformed，耗时 1.39s。

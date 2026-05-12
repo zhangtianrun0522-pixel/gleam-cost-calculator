@@ -2,6 +2,7 @@ import useStore from '../store';
 import { calcProjectCost, fmt, getBottleneck } from '../calc';
 
 export default function Header({ user, syncStatus, onLogout }) {
+  const orgContext = useStore((s) => s.orgContext);
   const projects = useStore((s) => s.projects);
   const platforms = useStore((s) => s.platforms);
   const globalConfig = useStore((s) => s.globalConfig);
@@ -32,7 +33,8 @@ export default function Header({ user, syncStatus, onLogout }) {
           <span className={syncStatus === 'error' ? 'bad' : ''}>
             {syncStatus === 'syncing' ? '同步中...' : syncStatus === 'saved' ? '已同步' : syncStatus === 'loading' ? '读取中...' : syncStatus === 'error' ? '同步失败' : '已登录'}
           </span>
-          <span>{user?.user_metadata?.team_name || user?.email}</span>
+          <span>{orgContext?.organization?.name || user?.user_metadata?.team_name || user?.email}</span>
+          {orgContext?.member?.role && <span>{orgContext.member.role}</span>}
           <button onClick={onLogout}>退出</button>
         </div>
       </div>

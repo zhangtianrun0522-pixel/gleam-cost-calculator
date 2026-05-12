@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import useStore from "../../store";
+import { getWriteAccess } from "../../sync";
 
 export default function RoleTable() {
   const roles = useStore(s => s.roles);
@@ -11,6 +12,8 @@ export default function RoleTable() {
   const addPerson = useStore(s => s.addPerson);
   const updatePerson = useStore(s => s.updatePerson);
   const deletePerson = useStore(s => s.deletePerson);
+  const orgContext = useStore(s => s.orgContext);
+  const canWrite = getWriteAccess(orgContext?.member).canWriteGlobal;
 
   const [selectedRoleName, setSelectedRoleName] = useState("");
   const selectedRole = roles.find(r => r.name === selectedRoleName);
@@ -20,7 +23,7 @@ export default function RoleTable() {
   );
 
   const handleAddPerson = () => {
-    if (!selectedRole) return;
+    if (!selectedRole || !canWrite) return;
     addPerson({
       name: "新人员",
       roleName: selectedRole.name,
@@ -42,7 +45,7 @@ export default function RoleTable() {
               默认薪资 {Number(selectedRole.salary || 0).toLocaleString()} 元；人员薪资为空时继承岗位默认值
             </div>
           </div>
-          <button className="addbtn" onClick={handleAddPerson}>+ 新增人员</button>
+          <button className="addbtn" onClick={handleAddPerson} disabled={!canWrite}>+ 新增人员</button>
         </div>
 
         <div className="person-row person-hdr">
@@ -62,22 +65,23 @@ export default function RoleTable() {
 
         {selectedPeople.map((person) => (
           <div className="person-row" key={person.id}>
-            <input className="si" value={person.name} onChange={e => updatePerson(person.id, { name: e.target.value })} />
+            <input className="si" value={person.name} disabled={!canWrite} onChange={e => updatePerson(person.id, { name: e.target.value })} />
             <input
               className="si"
               type="number"
+              disabled={!canWrite}
               placeholder={String(selectedRole.salary || 0)}
               value={person.salary ?? ""}
               onChange={e => updatePerson(person.id, { salary: e.target.value === "" ? "" : Number(e.target.value) })}
             />
-            <select className="si" value={person.status || "active"} onChange={e => updatePerson(person.id, { status: e.target.value })}>
+            <select className="si" value={person.status || "active"} disabled={!canWrite} onChange={e => updatePerson(person.id, { status: e.target.value })}>
               <option value="active">可用</option>
               <option value="busy">忙碌</option>
               <option value="inactive">停用</option>
             </select>
-            <input className="si" value={person.pointsAccount || ""} placeholder="平台账号" onChange={e => updatePerson(person.id, { pointsAccount: e.target.value })} />
-            <input className="si" value={person.note || ""} placeholder="备注" onChange={e => updatePerson(person.id, { note: e.target.value })} />
-            <button className="delbtn" onClick={() => { if (confirm("删除人员「" + person.name + "」？")) deletePerson(person.id); }}>×</button>
+            <input className="si" value={person.pointsAccount || ""} disabled={!canWrite} placeholder="平台账号" onChange={e => updatePerson(person.id, { pointsAccount: e.target.value })} />
+            <input className="si" value={person.note || ""} disabled={!canWrite} placeholder="备注" onChange={e => updatePerson(person.id, { note: e.target.value })} />
+            <button className="delbtn" disabled={!canWrite} onClick={() => { if (confirm("删除人员「" + person.name + "」？")) deletePerson(person.id); }}>×</button>
           </div>
         ))}
       </div>
@@ -89,6 +93,7 @@ export default function RoleTable() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div className="stitle" style={{ margin: 0 }}>人员资源池（公司标准工时）</div>
         <button className="addbtn"
+          disabled={!canWrite}
           onClick={() => addRole({ name: "新岗位", count: 1, salary: 8000, dayHrs: 8 })}>
           + 新增岗位
         </button>
@@ -107,23 +112,23 @@ export default function RoleTable() {
         const activeCount = rolePeople.filter(p => (p.status || "active") === "active").length;
         return (
           <div className="res-row role-row-grid" key={i}>
-            <input className="si" value={r.name}
+            <input className="si" value={r.name} disabled={!canWrite}
               onChange={e => {
                 const nextName = e.target.value;
                 setPeople(people.map(person => person.roleName === r.name ? { ...person, roleName: nextName } : person));
                 updateRole(i, { name: nextName });
               }} />
-            <input className="si" type="number" value={r.count} min="0" style={{ textAlign: "center" }}
+            <input className="si" type="number" value={r.count} disabled={!canWrite} min="0" style={{ textAlign: "center" }}
               onChange={e => updateRole(i, { count: Number(e.target.value) })} />
-            <input className="si" type="number" value={r.salary}
+            <input className="si" type="number" value={r.salary} disabled={!canWrite}
               onChange={e => updateRole(i, { salary: Number(e.target.value) })} />
-            <input className="si" type="number" value={r.dayHrs} style={{ textAlign: "center" }}
+            <input className="si" type="number" value={r.dayHrs} disabled={!canWrite} style={{ textAlign: "center" }}
               onChange={e => updateRole(i, { dayHrs: Number(e.target.value) })} />
             <div style={{ textAlign: "center", fontSize: 12, color: "#888" }}>
               {activeCount}/{rolePeople.length}
             </div>
             <button className="addbtn" onClick={() => setSelectedRoleName(r.name)}>管理</button>
-            <button className="delbtn" onClick={() => {
+            <button className="delbtn" disabled={!canWrite} onClick={() => {
               if (!confirm("删除岗位「" + r.name + "」？该岗位下人员会从人员库移除。")) return;
               setPeople(people.filter(person => person.roleName !== r.name));
               deleteRole(i);

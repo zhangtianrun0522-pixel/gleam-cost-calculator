@@ -2,6 +2,7 @@ import { useState } from 'react';
 import useStore from '../../store';
 import { getProjectAiConfig } from '../../calc';
 import ProjectCard from './ProjectCard';
+import { getWriteAccess } from '../../sync';
 
 export default function ProjectsTab() {
   const projects = useStore(s => s.projects);
@@ -9,10 +10,13 @@ export default function ProjectsTab() {
   const addProject = useStore(s => s.addProject);
   const updateProject = useStore(s => s.updateProject);
   const deleteProject = useStore(s => s.deleteProject);
+  const orgContext = useStore(s => s.orgContext);
+  const canWrite = getWriteAccess(orgContext?.member).canWriteGlobal;
 
   const [openIndex, setOpenIndex] = useState(-1);
 
   const handleAdd = () => {
+    if (!canWrite) return;
     const p = {
       name: '新项目 ' + (projects.length + 1),
       eps: 20, days: 30, scriptCost: 0, staffing: [],
@@ -26,8 +30,8 @@ export default function ProjectsTab() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, color: '#888' }}>点击项目卡片展开编辑</div>
-        <button className="addbtn" onClick={handleAdd}>+ 新增项目</button>
+        <div style={{ fontSize: 13, color: '#888' }}>{canWrite ? '点击项目卡片展开编辑' : '当前账号没有项目写权限，仅可查看授权项目'}</div>
+        <button className="addbtn" onClick={handleAdd} disabled={!canWrite}>+ 新增项目</button>
       </div>
       {projects.length === 0 && (
         <div style={{ padding: '20px 0', textAlign: 'center', color: '#aaa', fontSize: 13 }}>
@@ -40,8 +44,9 @@ export default function ProjectsTab() {
           project={project}
           isOpen={openIndex === i}
           onToggle={() => setOpenIndex(openIndex === i ? -1 : i)}
-          onUpdate={(patch) => updateProject(i, patch)}
-          onDelete={() => { deleteProject(i); if (openIndex === i) setOpenIndex(-1); }}
+          onUpdate={(patch) => canWrite && updateProject(i, patch)}
+          onDelete={() => { if (!canWrite) return; deleteProject(i); if (openIndex === i) setOpenIndex(-1); }}
+          canWrite={canWrite}
         />
       ))}
     </div>

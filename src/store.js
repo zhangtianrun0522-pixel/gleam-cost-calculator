@@ -40,6 +40,10 @@ const defaultState = {
   people: [],
   pointRecords: [],
   productionProgress: {},
+  orgContext: null,
+  departments: [],
+  organizationMembers: [],
+  organizationInvites: [],
 };
 
 function migrateFromOldKeys() {
@@ -73,6 +77,10 @@ const useStore = create(
       people: defaultState.people,
       pointRecords: defaultState.pointRecords,
       productionProgress: defaultState.productionProgress,
+      orgContext: defaultState.orgContext,
+      departments: defaultState.departments,
+      organizationMembers: defaultState.organizationMembers,
+      organizationInvites: defaultState.organizationInvites,
 
       setPlatforms: (platforms) => set({ platforms }),
       setRoles: (roles) => set({ roles }),
@@ -82,6 +90,10 @@ const useStore = create(
       setPeople: (people) => set({ people }),
       setPointRecords: (pointRecords) => set({ pointRecords }),
       setProductionProgress: (productionProgress) => set({ productionProgress }),
+      setOrgContext: (orgContext) => set({ orgContext }),
+      setDepartments: (departments) => set({ departments }),
+      setOrganizationMembers: (organizationMembers) => set({ organizationMembers }),
+      setOrganizationInvites: (organizationInvites) => set({ organizationInvites }),
       resetStore: () => set(defaultState),
 
       updateProject: (index, patch) =>

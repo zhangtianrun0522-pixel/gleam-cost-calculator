@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import supabase from '../supabase';
 import useStore from '../store';
-import { loadFromCloud, saveToCloud } from '../sync';
+import { getWriteAccess, loadLegacyUserData, loadOrgContext, loadOrgData, saveOrgData, saveToCloud } from '../sync';
 
 function applyCloudData(data, setters) {
   if (!data) return;
@@ -49,6 +49,7 @@ export default function AuthGate({ children }) {
   const people = useStore((s) => s.people);
   const pointRecords = useStore((s) => s.pointRecords);
   const productionProgress = useStore((s) => s.productionProgress);
+  const orgContext = useStore((s) => s.orgContext);
   const setPlatforms = useStore((s) => s.setPlatforms);
   const setRoles = useStore((s) => s.setRoles);
   const setGlobalConfig = useStore((s) => s.setGlobalConfig);
@@ -57,6 +58,10 @@ export default function AuthGate({ children }) {
   const setPeople = useStore((s) => s.setPeople);
   const setPointRecords = useStore((s) => s.setPointRecords);
   const setProductionProgress = useStore((s) => s.setProductionProgress);
+  const setOrgContext = useStore((s) => s.setOrgContext);
+  const setDepartments = useStore((s) => s.setDepartments);
+  const setOrganizationMembers = useStore((s) => s.setOrganizationMembers);
+  const setOrganizationInvites = useStore((s) => s.setOrganizationInvites);
   const resetStore = useStore((s) => s.resetStore);
 
   const debounceRef = useRef(null);
@@ -69,8 +74,48 @@ export default function AuthGate({ children }) {
     setDataReady(false);
     setDataError('');
     setSyncStatus('loading');
+    const contextResult = await withTimeout(
+      loadOrgContext(supabase, sessionUser),
+      DATA_LOAD_TIMEOUT_MS,
+      '组织信息读取超时，请刷新页面或退出后重试。'
+    ).catch((err) => ({ data: null, error: err }));
+    if (loadSeq !== loadSeqRef.current) return;
+    if (contextResult.error) {
+      setDataError(contextResult.error.message || '加载组织信息失败，请稍后刷新重试。');
+      setSyncStatus('error');
+      return;
+    }
+    const context = contextResult.data;
+
+    if (context.legacyMode) {
+      const legacyResult = await withTimeout(
+        loadLegacyUserData(supabase, sessionUser.id),
+        DATA_LOAD_TIMEOUT_MS,
+        '云端数据读取超时，请刷新页面或退出后重试。'
+      ).catch((err) => ({ data: null, error: err }));
+      if (loadSeq !== loadSeqRef.current) return;
+      if (legacyResult.error) {
+        setDataError(legacyResult.error.message || '加载云端数据失败，请稍后刷新重试。');
+        setSyncStatus('error');
+        return;
+      }
+      resetStore();
+      setOrgContext(context);
+      if (legacyResult.data) {
+        applyCloudData(legacyResult.data, { setPlatforms, setRoles, setGlobalConfig, setProjects, setTemplates, setPeople, setPointRecords, setProductionProgress });
+      }
+      setDepartments([]);
+      setOrganizationMembers([]);
+      setOrganizationInvites([]);
+      setMessage('');
+      setSyncStatus(legacyResult.data ? 'saved' : 'idle');
+      userIdRef.current = sessionUser.id;
+      setDataReady(true);
+      return;
+    }
+
     const { data, error } = await withTimeout(
-      loadFromCloud(supabase, sessionUser.id),
+      loadOrgData(supabase, context.organization.id, context.member),
       DATA_LOAD_TIMEOUT_MS,
       '云端数据读取超时，请刷新页面或退出后重试。'
     ).catch((err) => ({ data: null, error: err }));
@@ -80,10 +125,16 @@ export default function AuthGate({ children }) {
       setSyncStatus('error');
       return;
     } else {
-      if (data) {
-        applyCloudData(data, { setPlatforms, setRoles, setGlobalConfig, setProjects, setTemplates, setPeople, setPointRecords, setProductionProgress });
+      if (data?.state) {
+        resetStore();
+        setOrgContext(context);
+        applyCloudData(data.state, { setPlatforms, setRoles, setGlobalConfig, setProjects, setTemplates, setPeople, setPointRecords, setProductionProgress });
+        setDepartments(data.departments || []);
+        setOrganizationMembers(data.members || []);
+        setOrganizationInvites(data.invites || []);
       } else {
         resetStore();
+        setOrgContext(context);
       }
       setMessage('');
       setSyncStatus(data ? 'saved' : 'idle');
@@ -141,6 +192,7 @@ export default function AuthGate({ children }) {
         loadSeqRef.current += 1;
         userIdRef.current = null;
         resetStore();
+        setOrgContext(null);
         setUser(null);
         setDataReady(false);
         setDataError('');
@@ -158,11 +210,13 @@ export default function AuthGate({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!user || !dataReady || userIdRef.current !== user.id) return;
+    if (!user || !dataReady || userIdRef.current !== user.id || !orgContext?.organization?.id) return;
+    const access = getWriteAccess(orgContext.member);
+    if (!access.canWriteGlobal) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSyncStatus('syncing');
     debounceRef.current = setTimeout(async () => {
-      const { error } = await saveToCloud(supabase, user.id, {
+      const payload = {
         platforms,
         roles,
         globalConfig,
@@ -171,11 +225,14 @@ export default function AuthGate({ children }) {
         people,
         pointRecords,
         productionProgress,
-      });
+      };
+      const { error } = orgContext.legacyMode
+        ? await saveToCloud(supabase, user.id, payload)
+        : await saveOrgData(supabase, orgContext.organization.id, payload);
       setSyncStatus(error ? 'error' : 'saved');
     }, 1200);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [platforms, roles, globalConfig, projects, templates, people, pointRecords, productionProgress, user, dataReady]);
+  }, [platforms, roles, globalConfig, projects, templates, people, pointRecords, productionProgress, user, dataReady, orgContext]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

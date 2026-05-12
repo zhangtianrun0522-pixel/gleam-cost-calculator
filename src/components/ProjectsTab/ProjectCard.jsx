@@ -2,7 +2,7 @@ import { useState } from 'react';
 import useStore from '../../store';
 import { calcEpisodePoints, calcProjectCost, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 
-export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete }) {
+export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true }) {
   const platforms = useStore(s => s.platforms);
   const globalConfig = useStore(s => s.globalConfig);
   const roles = useStore(s => s.roles);
@@ -20,10 +20,11 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
   const aiDur = Number(aiConfig.aiDur) || 0;
   const actualDur = Math.round(aiDur * shotRatio);
   const updateAiConfig = (key, value) => {
+    if (!canWrite) return;
     onUpdate({ aiConfig: { ...(project.aiConfig || {}), [key]: value } });
   };
-  const useProjectAiDefaults = () => onUpdate({ aiConfig: getProjectAiConfig(null, globalConfig) });
-  const resetProjectAiConfig = () => onUpdate({ aiConfig: null });
+  const useProjectAiDefaults = () => canWrite && onUpdate({ aiConfig: getProjectAiConfig(null, globalConfig) });
+  const resetProjectAiConfig = () => canWrite && onUpdate({ aiConfig: null });
 
   const globalDemand = {};
   projects.forEach(p => {
@@ -36,12 +37,14 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
   const dlId = "staffing-role-dl-" + project.name.replace(/[^a-zA-Z0-9]/g, "-");
 
   const updateStaffing = (idx, patch) => {
+    if (!canWrite) return;
     const newStaffing = [...project.staffing];
     newStaffing[idx] = { ...newStaffing[idx], ...patch };
     onUpdate({ staffing: newStaffing });
   };
 
   const toggleStaffingPerson = (idx, personId) => {
+    if (!canWrite) return;
     const row = project.staffing[idx] || {};
     const rolePeople = people.filter(p => p.roleName === row.roleName && (p.status || 'active') !== 'inactive');
     const peopleIds = Array.isArray(row.peopleIds) && row.peopleIds.length > 0
@@ -53,7 +56,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
     updateStaffing(idx, { peopleIds: nextPeopleIds });
   };
 
-  const handleDelete = (e) => { e.stopPropagation(); if (confirm('删除项目「' + project.name + '」？')) onDelete(); };
+  const handleDelete = (e) => { e.stopPropagation(); if (!canWrite) return; if (confirm('删除项目「' + project.name + '」？')) onDelete(); };
 
   return (
     <div className={`proj-card${isOpen ? " open" : ""}`}>
@@ -71,7 +74,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
             {c.net >= 0 ? "+" : ""}{fmt(c.net)}
           </span>
           <span style={{ fontSize: 12, color: '#bbb' }}>{isOpen ? '▲' : '▼'}</span>
-          <button className="delbtn" onClick={handleDelete}>×</button>
+          <button className="delbtn" onClick={handleDelete} disabled={!canWrite}>×</button>
         </div>
       </div>
 
@@ -80,20 +83,20 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
           <div className="g3" style={{ marginBottom: 10 }}>
             <div className="fld">
               <label>项目名称</label>
-              <input className="si" value={project.name} onChange={e => onUpdate({ name: e.target.value })} />
+              <input className="si" value={project.name} disabled={!canWrite} onChange={e => onUpdate({ name: e.target.value })} />
             </div>
             <div className="fld">
               <label>总集数</label>
-              <input className="si" type="number" value={project.eps} onChange={e => onUpdate({ eps: Math.max(1, +e.target.value) })} />
+              <input className="si" type="number" value={project.eps} disabled={!canWrite} onChange={e => onUpdate({ eps: Math.max(1, +e.target.value) })} />
             </div>
             <div className="fld">
               <label>制作周期（天）</label>
-              <input className="si" type="number" value={project.days} onChange={e => onUpdate({ days: Math.max(1, +e.target.value) })} />
+              <input className="si" type="number" value={project.days} disabled={!canWrite} onChange={e => onUpdate({ days: Math.max(1, +e.target.value) })} />
             </div>
           </div>
           <div className="fld" style={{ marginBottom: 10, maxWidth: 220 }}>
             <label>脚本外包费用（元）</label>
-            <input className="si" type="number" value={project.scriptCost || 0} onChange={e => onUpdate({ scriptCost: +e.target.value })} />
+            <input className="si" type="number" value={project.scriptCost || 0} disabled={!canWrite} onChange={e => onUpdate({ scriptCost: +e.target.value })} />
           </div>
 
           <div className="project-ai-config">
@@ -106,26 +109,26 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
               </div>
               <div className="project-ai-actions">
                 {usesProjectAiConfig ? (
-                  <button className="addbtn" type="button" onClick={resetProjectAiConfig}>恢复全局默认</button>
+                  <button className="addbtn" type="button" onClick={resetProjectAiConfig} disabled={!canWrite}>恢复全局默认</button>
                 ) : (
-                  <button className="addbtn" type="button" onClick={useProjectAiDefaults}>启用项目配置</button>
+                  <button className="addbtn" type="button" onClick={useProjectAiDefaults} disabled={!canWrite}>启用项目配置</button>
                 )}
               </div>
             </div>
             <div className="g3">
               <div className="fld">
                 <label>生成速率（积分/s）</label>
-                <input className="si" type="number" step="0.5" disabled={!usesProjectAiConfig} value={aiConfig.aiRate ?? 0}
+                <input className="si" type="number" step="0.5" disabled={!canWrite || !usesProjectAiConfig} value={aiConfig.aiRate ?? 0}
                   onChange={e => updateAiConfig('aiRate', Number(e.target.value))} />
               </div>
               <div className="fld">
                 <label>每集成片时长（s）</label>
-                <input className="si" type="number" disabled={!usesProjectAiConfig} value={aiConfig.aiDur ?? 0}
+                <input className="si" type="number" disabled={!canWrite || !usesProjectAiConfig} value={aiConfig.aiDur ?? 0}
                   onChange={e => updateAiConfig('aiDur', Number(e.target.value))} />
               </div>
               <div className="fld">
                 <label>片比（成片 : 素材）</label>
-                <input className="si" type="number" step="0.1" min="1.0" disabled={!usesProjectAiConfig} value={aiConfig.shotRatio ?? 1}
+                <input className="si" type="number" step="0.1" min="1.0" disabled={!canWrite || !usesProjectAiConfig} value={aiConfig.shotRatio ?? 1}
                   onChange={e => updateAiConfig('shotRatio', Math.round(Number(e.target.value) * 10) / 10)} />
               </div>
             </div>
@@ -137,12 +140,12 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
             <div className="g2 project-ai-image-row">
               <div className="fld">
                 <label>图像积分/张</label>
-                <input className="si" type="number" disabled={!usesProjectAiConfig} value={aiConfig.aiImgPts ?? 0}
+                <input className="si" type="number" disabled={!canWrite || !usesProjectAiConfig} value={aiConfig.aiImgPts ?? 0}
                   onChange={e => updateAiConfig('aiImgPts', Number(e.target.value))} />
               </div>
               <div className="fld">
                 <label>每集图像数量（张）</label>
-                <input className="si" type="number" disabled={!usesProjectAiConfig} value={aiConfig.aiImgN ?? 0}
+                <input className="si" type="number" disabled={!canWrite || !usesProjectAiConfig} value={aiConfig.aiImgN ?? 0}
                   onChange={e => updateAiConfig('aiImgN', Number(e.target.value))} />
               </div>
             </div>
@@ -158,15 +161,15 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div className="stitle" style={{ margin: 0 }}>人员编排</div>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                <select className="si" style={{ width: 140 }} value={tplSel} onChange={e => setTplSel(e.target.value)}>
+                <select className="si" style={{ width: 140 }} value={tplSel} disabled={!canWrite} onChange={e => setTplSel(e.target.value)}>
                   <option value="">选择模板...</option>
                   {templates.map((t, ti) => <option key={ti} value={ti}>{t.name}</option>)}
                 </select>
-                <button className="addbtn" onClick={() => {
+                <button className="addbtn" disabled={!canWrite} onClick={() => {
                   const tpl = templates[parseInt(tplSel)];
                   if (tpl) { onUpdate({ staffing: tpl.roles.map(r => ({ roleName: r.roleName, ratio: r.ratio })) }); setTplSel(""); }
                 }}>套用</button>
-                <button className="addbtn" onClick={() => onUpdate({ staffing: [...(project.staffing || []), { roleName: "编剧", ratio: 1 }] })}>+ 新增岗位</button>
+                <button className="addbtn" disabled={!canWrite} onClick={() => onUpdate({ staffing: [...(project.staffing || []), { roleName: "编剧", ratio: 1 }] })}>+ 新增岗位</button>
               </div>
             </div>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>配置每个岗位的人力占用比例，并选择该项目实际制作人员</div>
@@ -208,8 +211,8 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
               }
               return (
                 <div key={sIdx} className="staffing-row" style={rowBg}>
-                  <input className="si" list={dlId} value={s.roleName} onChange={e => updateStaffing(sIdx, { roleName: e.target.value })} />
-                  <input className="si" type="number" step={0.1} min={0} value={s.ratio} onChange={e => updateStaffing(sIdx, { ratio: +e.target.value })} style={{ textAlign: 'center' }} />
+                  <input className="si" list={dlId} value={s.roleName} disabled={!canWrite} onChange={e => updateStaffing(sIdx, { roleName: e.target.value })} />
+                  <input className="si" type="number" step={0.1} min={0} value={s.ratio} disabled={!canWrite} onChange={e => updateStaffing(sIdx, { ratio: +e.target.value })} style={{ textAlign: 'center' }} />
                   <div style={{ fontSize: 12, textAlign: 'center', color: role ? '#1a1a1a' : '#854F0B' }}>{count > 0 ? count : '—'}</div>
                   <div style={{ fontSize: 12, textAlign: 'center', color: '#888' }}>{gDemandStr}</div>
                   <div style={{ textAlign: 'center' }}>{statusBadge}</div>
@@ -224,6 +227,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
                             type="button"
                             className={`person-chip${checked ? ' on' : ''}${person.status === 'busy' ? ' busy' : ''}`}
                             key={person.id}
+                            disabled={!canWrite}
                             onClick={() => toggleStaffingPerson(sIdx, person.id)}
                             title={person.pointsAccount || person.note || person.name}
                           >
@@ -233,7 +237,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
                       })
                     )}
                   </div>
-                  <button className="delbtn" onClick={() => onUpdate({ staffing: project.staffing.filter((_, si) => si !== sIdx) })}>×</button>
+                  <button className="delbtn" disabled={!canWrite} onClick={() => onUpdate({ staffing: project.staffing.filter((_, si) => si !== sIdx) })}>×</button>
                 </div>
               );
             })}
@@ -249,29 +253,29 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
           <div className="g3" style={{ marginBottom: 10 }}>
             <div className="fld">
               <label>平台分成/集（元）</label>
-              <input className="si" type="number" value={project.revPlat || 0} onChange={e => onUpdate({ revPlat: +e.target.value })} />
+              <input className="si" type="number" value={project.revPlat || 0} disabled={!canWrite} onChange={e => onUpdate({ revPlat: +e.target.value })} />
             </div>
             <div className="fld">
               <label>品牌植入（元）</label>
-              <input className="si" type="number" value={project.revBrand || 0} onChange={e => onUpdate({ revBrand: +e.target.value })} />
+              <input className="si" type="number" value={project.revBrand || 0} disabled={!canWrite} onChange={e => onUpdate({ revBrand: +e.target.value })} />
             </div>
             <div className="fld">
               <label>版权/发行（元）</label>
-              <input className="si" type="number" value={project.revLic || 0} onChange={e => onUpdate({ revLic: +e.target.value })} />
+              <input className="si" type="number" value={project.revLic || 0} disabled={!canWrite} onChange={e => onUpdate({ revLic: +e.target.value })} />
             </div>
           </div>
           <div className="g3">
             <div className="fld">
               <label>IP衍生品（元）</label>
-              <input className="si" type="number" value={project.revMerch || 0} onChange={e => onUpdate({ revMerch: +e.target.value })} />
+              <input className="si" type="number" value={project.revMerch || 0} disabled={!canWrite} onChange={e => onUpdate({ revMerch: +e.target.value })} />
             </div>
             <div className="fld">
               <label>预估播放量（万次）</label>
-              <input className="si" type="number" value={project.revViews || 0} onChange={e => onUpdate({ revViews: +e.target.value })} />
+              <input className="si" type="number" value={project.revViews || 0} disabled={!canWrite} onChange={e => onUpdate({ revViews: +e.target.value })} />
             </div>
             <div className="fld">
               <label>广告CPM（元/千次）</label>
-              <input className="si" type="number" value={project.revCpm || 0} onChange={e => onUpdate({ revCpm: +e.target.value })} />
+              <input className="si" type="number" value={project.revCpm || 0} disabled={!canWrite} onChange={e => onUpdate({ revCpm: +e.target.value })} />
             </div>
           </div>
         </div>
