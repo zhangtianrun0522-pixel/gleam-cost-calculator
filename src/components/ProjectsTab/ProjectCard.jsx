@@ -2,7 +2,7 @@ import { useState } from 'react';
 import useStore from '../../store';
 import { calcEpisodePoints, calcProjectCost, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 
-export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true, canDelete = true, departments = [] }) {
+export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true, canDelete = true, departments = [], departmentOptions = departments }) {
   const platforms = useStore(s => s.platforms);
   const globalConfig = useStore(s => s.globalConfig);
   const roles = useStore(s => s.roles);
@@ -91,7 +91,10 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
               <label>所属部门</label>
               <select className="si" value={project.departmentId || ''} disabled={!canWrite} onChange={e => onUpdate({ departmentId: e.target.value })}>
                 <option value="">未分部门</option>
-                {departments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {department && !departmentOptions.some(item => item.id === department.id) && (
+                  <option value={department.id}>{department.name}</option>
+                )}
+                {departmentOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </div>
             <div className="fld">

@@ -15,6 +15,10 @@ export default function ProjectsTab() {
   const access = getWriteAccess(orgContext?.member);
   const canWrite = access.canWriteAny;
   const canCreateDelete = access.canWriteGlobal;
+  const memberDepartmentIds = orgContext?.member?.department_ids || [];
+  const departmentOptions = access.canWriteGlobal
+    ? departments
+    : departments.filter(department => memberDepartmentIds.includes(department.id));
 
   const [openIndex, setOpenIndex] = useState(-1);
 
@@ -53,6 +57,7 @@ export default function ProjectsTab() {
           canWrite={canWrite}
           canDelete={canCreateDelete}
           departments={departments}
+          departmentOptions={departmentOptions}
         />
       ))}
     </div>
