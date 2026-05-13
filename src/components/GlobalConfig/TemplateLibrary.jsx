@@ -102,18 +102,19 @@ export default function TemplateLibrary() {
 
                 {tpl.roles.map((r, rIdx) => (
                   <div key={rIdx} style={{ display: 'grid', gridTemplateColumns: '1fr 72px 28px', gap: 4, alignItems: 'center', marginBottom: 4 }}>
-                    <input className="si" value={r.roleName} disabled={!canWrite} list={`tpl-roles-dl-${tIdx}`}
-                      onChange={e => handleRoleChange(tIdx, rIdx, 'roleName', e.target.value)} />
+                    <select className="si" value={r.roleName} disabled={!canWrite}
+                      onChange={e => handleRoleChange(tIdx, rIdx, 'roleName', e.target.value)}>
+                      {r.roleName && !roles.some(role => role.name === r.roleName) && (
+                        <option value={r.roleName}>{r.roleName}</option>
+                      )}
+                      {roles.map(role => <option key={role.name} value={role.name}>{role.name}</option>)}
+                    </select>
                     <input className="si" type="number" value={r.ratio} step={0.1} min={0} disabled={!canWrite}
                       style={{ textAlign: 'center' }}
                       onChange={e => handleRoleChange(tIdx, rIdx, 'ratio', e.target.value)} />
                     <button className="delbtn" disabled={!canWrite} onClick={() => handleDeleteRole(tIdx, rIdx)}>×</button>
                   </div>
                 ))}
-
-                <datalist id={`tpl-roles-dl-${tIdx}`}>
-                  {roles.map(r => <option key={r.name} value={r.name} />)}
-                </datalist>
 
                 {projects.length > 0 && (
                   <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: 8 }}>
