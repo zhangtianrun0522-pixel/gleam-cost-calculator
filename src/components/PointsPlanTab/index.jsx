@@ -36,6 +36,7 @@ export default function PointsPlanTab() {
     project,
     points: calcProjectPoints(project, globalConfig, reserveRate),
   })), [projects, globalConfig, reserveRate]);
+  const projectEntries = projects.map((project, idx) => ({ project, idx }));
 
   const totalBase = rows.reduce((sum, row) => sum + row.points.basePoints, 0);
   const totalReserve = rows.reduce((sum, row) => sum + row.points.reservePoints, 0);
@@ -310,6 +311,64 @@ export default function PointsPlanTab() {
     setOpenBatchIds(prev => ({ ...prev, [batchId]: !prev[batchId] }));
   };
 
+  const renderProjectDashboardCard = (project, idx) => {
+    const dashboard = getProjectDashboard(project);
+    const isActive = issueProjectIdx === String(idx);
+    return (
+      <div
+        className={`card points-dashboard-card${isActive ? ' active' : ''}`}
+        key={`${project.name}-${idx}`}
+        onClick={() => handleIssueProjectChange(String(idx))}
+      >
+        <div className="points-dashboard-main">
+          <div className="points-donut" style={{ background: `conic-gradient(#185FA5 0deg ${dashboard.issuedDeg}deg, #EAF3DE ${dashboard.issuedDeg}deg 360deg)` }}>
+            <div className="points-donut-inner">
+              <div className="points-donut-value">{dashboard.plannedPoints > 0 ? Math.round(dashboard.issuedPoints / dashboard.plannedPoints * 100) : 0}%</div>
+              <div className="points-donut-label">积分已发</div>
+            </div>
+          </div>
+          <div className="points-dashboard-copy">
+            <div className="points-dashboard-title">{project.name}</div>
+            <div className="points-dashboard-metrics">
+              <span className="badge b-blue">计划 {fmtPoints(dashboard.plannedPoints)}</span>
+              <span className="badge b-amber">已发 {fmtPoints(dashboard.issuedPoints)}</span>
+              <span className={`badge ${dashboard.remainingPoints >= 0 ? 'b-green' : 'b-red'}`}>剩余 {fmtPoints(dashboard.remainingPoints)}</span>
+            </div>
+            <div className="points-progress-rail">
+              <div className="points-progress-fill expected" style={{ width: `${dashboard.expectedRate * 100}%` }} />
+              <div className="points-progress-fill actual" style={{ width: `${dashboard.actualRate * 100}%` }} />
+            </div>
+            <div className="points-progress-legend">
+              <span><i className="legend-dot expected" />按积分应到第 {dashboard.expectedEp}/{dashboard.eps || 0} 集</span>
+              <span><i className="legend-dot actual" />实际做到第 {dashboard.actualEp}/{dashboard.eps || 0} 集</span>
+            </div>
+          </div>
+        </div>
+        <div className="points-progress-input" onClick={e => e.stopPropagation()}>
+          <div className="fld">
+            <label>实际制作进度（集）</label>
+            <input
+              type="number"
+              min="0"
+              max={dashboard.eps || 0}
+              value={productionProgress[project.name]?.actualEpisode ?? ''}
+              placeholder="填写集数"
+              disabled={!canWrite}
+              onChange={e => updateProductionProgress(project.name, { actualEpisode: Math.max(Number(e.target.value) || 0, 0) })}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const activeProjectEntries = issueProject
+    ? projectEntries.filter(({ idx }) => String(idx) === issueProjectIdx)
+    : projectEntries;
+  const inactiveProjectEntries = issueProject
+    ? projectEntries.filter(({ idx }) => String(idx) !== issueProjectIdx)
+    : [];
+
   return (
     <div>
       <div className="g2 points-total-summary">
@@ -321,56 +380,7 @@ export default function PointsPlanTab() {
       <div className="points-dashboard-list">
         {projects.length === 0 ? (
           <div className="card" style={{ fontSize: 13, color: '#aaa', textAlign: 'center' }}>暂无项目，请先在「项目管理」中添加</div>
-        ) : projects.map((project, idx) => {
-          const dashboard = getProjectDashboard(project);
-          const isActive = issueProjectIdx === String(idx);
-          return (
-            <div
-              className={`card points-dashboard-card${isActive ? ' active' : ''}`}
-              key={`${project.name}-${idx}`}
-              onClick={() => handleIssueProjectChange(String(idx))}
-            >
-              <div className="points-dashboard-main">
-                <div className="points-donut" style={{ background: `conic-gradient(#185FA5 0deg ${dashboard.issuedDeg}deg, #EAF3DE ${dashboard.issuedDeg}deg 360deg)` }}>
-                  <div className="points-donut-inner">
-                    <div className="points-donut-value">{dashboard.plannedPoints > 0 ? Math.round(dashboard.issuedPoints / dashboard.plannedPoints * 100) : 0}%</div>
-                    <div className="points-donut-label">积分已发</div>
-                  </div>
-                </div>
-                <div className="points-dashboard-copy">
-                  <div className="points-dashboard-title">{project.name}</div>
-                  <div className="points-dashboard-metrics">
-                    <span className="badge b-blue">计划 {fmtPoints(dashboard.plannedPoints)}</span>
-                    <span className="badge b-amber">已发 {fmtPoints(dashboard.issuedPoints)}</span>
-                    <span className={`badge ${dashboard.remainingPoints >= 0 ? 'b-green' : 'b-red'}`}>剩余 {fmtPoints(dashboard.remainingPoints)}</span>
-                  </div>
-                  <div className="points-progress-rail">
-                    <div className="points-progress-fill expected" style={{ width: `${dashboard.expectedRate * 100}%` }} />
-                    <div className="points-progress-fill actual" style={{ width: `${dashboard.actualRate * 100}%` }} />
-                  </div>
-                  <div className="points-progress-legend">
-                    <span><i className="legend-dot expected" />按积分应到第 {dashboard.expectedEp}/{dashboard.eps || 0} 集</span>
-                    <span><i className="legend-dot actual" />实际做到第 {dashboard.actualEp}/{dashboard.eps || 0} 集</span>
-                  </div>
-                </div>
-              </div>
-              <div className="points-progress-input" onClick={e => e.stopPropagation()}>
-                <div className="fld">
-                  <label>实际制作进度（集）</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={dashboard.eps || 0}
-                    value={productionProgress[project.name]?.actualEpisode ?? ''}
-                    placeholder="填写集数"
-                    disabled={!canWrite}
-                    onChange={e => updateProductionProgress(project.name, { actualEpisode: Math.max(Number(e.target.value) || 0, 0) })}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        ) : activeProjectEntries.map(({ project, idx }) => renderProjectDashboardCard(project, idx))}
       </div>
 
       {!issueProject && projects.length > 0 && (
@@ -657,6 +667,11 @@ export default function PointsPlanTab() {
           })
         )}
       </div>
+      {inactiveProjectEntries.length > 0 && (
+        <div className="points-dashboard-list">
+          {inactiveProjectEntries.map(({ project, idx }) => renderProjectDashboardCard(project, idx))}
+        </div>
+      )}
       </>
       )}
     </div>
