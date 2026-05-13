@@ -45,6 +45,9 @@ export default function PointsPlanTab() {
   const issueProject = issueProjectIdx === '' ? null : projects[Number(issueProjectIdx)];
   const activeProjectName = batchProject || issueProject?.name || '';
   const activeProject = activeProjectName ? projects.find(project => project.name === activeProjectName) : null;
+  const detailRows = activeProjectName
+    ? rows.filter(({ project }) => project.name === activeProjectName)
+    : rows;
   const scopedPointRecords = activeProjectName
     ? pointRecords.filter(record => record.projectName === activeProjectName)
     : pointRecords;
@@ -537,13 +540,13 @@ export default function PointsPlanTab() {
       </div>
 
       <div className="card">
-        <div className="stitle">项目积分明细</div>
-        {rows.length === 0 && (
+        <div className="stitle">{activeProjectName ? `${activeProjectName} · 项目积分明细` : '项目积分明细'}</div>
+        {detailRows.length === 0 && (
           <div style={{ fontSize: 13, color: '#aaa', padding: '10px 0', textAlign: 'center' }}>
             暂无项目，请先在「项目管理」中添加
           </div>
         )}
-        {rows.map(({ project, points }, idx) => {
+        {detailRows.map(({ project, points }, idx) => {
           const staffing = project.staffing || [];
           const ratioTotal = staffing.reduce((sum, s) => sum + (Number(s.ratio) || 0), 0);
           const projectEpPoints = calcEpisodePoints(getProjectAiConfig(project, globalConfig));

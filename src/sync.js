@@ -253,7 +253,26 @@ export async function loadOrgContext(supabase, user) {
     }
     if (inviteError) return { data: null, error: inviteError };
 
+    const loadMemberships = () => supabase
+      .from(ORG_TABLES.members)
+      .select('*, organization:organizations(*)')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true });
+
+    let { data: memberships, error: memberLoadError } = await loadMemberships();
+    if (memberLoadError) return { data: null, error: memberLoadError };
+
     for (const invite of pendingInvites || []) {
+      const existingMembership = (memberships || []).find((member) => member.organization_id === invite.organization_id);
+      if (existingMembership) {
+        await supabase
+          .from(ORG_TABLES.invites)
+          .update({ status: 'accepted', accepted_by: user.id, updated_at: new Date().toISOString() })
+          .eq('id', invite.id);
+        continue;
+      }
+
       const { error: memberError } = await supabase
         .from(ORG_TABLES.members)
         .upsert({
@@ -274,15 +293,13 @@ export async function loadOrgContext(supabase, user) {
         .from(ORG_TABLES.invites)
         .update({ status: 'accepted', accepted_by: user.id, updated_at: new Date().toISOString() })
         .eq('id', invite.id);
-      if (acceptError) return { data: null, error: acceptError };
+      if (acceptError) {
+        // Membership creation is the critical path for login. If the invite
+        // status update is blocked by a stale policy, let the user continue.
+      }
     }
 
-    const { data: memberships, error: memberLoadError } = await supabase
-      .from(ORG_TABLES.members)
-      .select('*, organization:organizations(*)')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .order('created_at', { ascending: true });
+    ({ data: memberships, error: memberLoadError } = await loadMemberships());
     if (memberLoadError) return { data: null, error: memberLoadError };
 
     if (memberships && memberships.length > 0) {
