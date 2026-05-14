@@ -1,5 +1,5 @@
 import useStore from '../../store';
-import { calcProjectCost, fmt } from '../../calc';
+import { calcProjectCost, fmt, getEffectiveRoleCount } from '../../calc';
 
 export default function PoolTab() {
   const projects = useStore(s => s.projects);
@@ -34,7 +34,7 @@ export default function PoolTab() {
             const s = p.staffing?.find(x => x.roleName === r.name);
             return sum + (s ? s.ratio : 0);
           }, 0);
-          const supply = r.count;
+          const supply = getEffectiveRoleCount(r, people);
           const ratio = supply > 0 ? demand / supply : (demand > 0 ? 99 : 0);
           const pct = Math.min(ratio * 100, 100);
           const over = ratio > 1, tight = ratio > 0.8;
@@ -48,7 +48,7 @@ export default function PoolTab() {
           return (
             <div className="pool-row" key={i}>
               <div style={{ minWidth: 100, fontSize: 13 }}>
-                {r.name} <span style={{ color: '#bbb', fontSize: 11 }}>({r.count}人)</span>
+                {r.name} <span style={{ color: '#bbb', fontSize: 11 }}>({supply}人)</span>
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#999' }}>

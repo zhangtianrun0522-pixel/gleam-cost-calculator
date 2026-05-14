@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import useStore from "../../store";
 import { getWriteAccess } from "../../sync";
+import { getActiveRolePeople, getEffectiveRoleCount } from "../../calc";
 
 export default function RoleTable() {
   const roles = useStore(s => s.roles);
@@ -109,7 +110,9 @@ export default function RoleTable() {
       </div>
       {roles.map((r, i) => {
         const rolePeople = people.filter(p => p.roleName === r.name);
-        const activeCount = rolePeople.filter(p => (p.status || "active") === "active").length;
+        const activeCount = getActiveRolePeople(people, r.name).length;
+        const effectiveCount = getEffectiveRoleCount(r, people);
+        const isLinkedCount = activeCount > 0;
         return (
           <div className="res-row role-row-grid" key={i}>
             <input className="si" value={r.name} disabled={!canWrite}
@@ -118,7 +121,8 @@ export default function RoleTable() {
                 setPeople(people.map(person => person.roleName === r.name ? { ...person, roleName: nextName } : person));
                 updateRole(i, { name: nextName });
               }} />
-            <input className="si" type="number" value={r.count} disabled={!canWrite} min="0" style={{ textAlign: "center" }}
+            <input className="si" type="number" value={effectiveCount} disabled={!canWrite || isLinkedCount} min="0" style={{ textAlign: "center" }}
+              title={isLinkedCount ? "已按具体人员自动统计" : "未维护具体人员时使用手动计划人数"}
               onChange={e => updateRole(i, { count: Number(e.target.value) })} />
             <input className="si" type="number" value={r.salary} disabled={!canWrite}
               onChange={e => updateRole(i, { salary: Number(e.target.value) })} />

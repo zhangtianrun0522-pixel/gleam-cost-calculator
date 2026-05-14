@@ -13,7 +13,7 @@ export default function Header({ user, syncStatus, onLogout }) {
     (sum, p) => sum + calcProjectCost(p, platforms, globalConfig, roles, people).total,
     0
   );
-  const bottleneck = getBottleneck(projects, roles);
+  const bottleneck = getBottleneck(projects, roles, people);
 
   return (
     <div className="hd">

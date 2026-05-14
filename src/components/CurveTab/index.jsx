@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Chart } from 'chart.js/auto';
 import useStore from '../../store';
-import { calcProjectCost, fmt } from '../../calc';
+import { calcProjectCost, fmt, getEffectiveRoleCount } from '../../calc';
 
 export default function CurveTab() {
   const projects = useStore(s => s.projects);
@@ -55,8 +55,8 @@ export default function CurveTab() {
     const dTot = [], dAi = [], dHr = [], dFix = [];
     const dCompHr = [], dCompAi = [];
     const globalHrBase = isGlobal
-      ? roles.reduce((a, r) => a + r.count * r.salary * (Math.max(totalDays, 30) / 30), 0)
-      : roles.reduce((a, r) => a + r.count * r.salary * (p.days / 30), 0);
+      ? roles.reduce((a, r) => a + getEffectiveRoleCount(r, people) * r.salary * (Math.max(totalDays, 30) / 30), 0)
+      : roles.reduce((a, r) => a + getEffectiveRoleCount(r, people) * r.salary * (p.days / 30), 0);
 
     const calcScaledGlobalCost = (eps) => {
       const scale = baseEps > 0 ? eps / baseEps : 1;

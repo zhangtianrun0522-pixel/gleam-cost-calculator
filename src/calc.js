@@ -5,6 +5,15 @@ function getSelectedPeople(staffing, people) {
   return ids.map(id => people.find(person => person.id === id)).filter(Boolean);
 }
 
+export function getActiveRolePeople(people = [], roleName) {
+  return people.filter(person => person.roleName === roleName && (person.status || 'active') === 'active');
+}
+
+export function getEffectiveRoleCount(role, people = []) {
+  const activeCount = getActiveRolePeople(people, role?.name).length;
+  return activeCount > 0 ? activeCount : Number(role?.count) || 0;
+}
+
 function getPersonSalary(person, role) {
   return Number(person.salary) > 0 ? Number(person.salary) : (Number(role?.salary) || 0);
 }
@@ -41,7 +50,7 @@ export function calcProjectCost(p, platforms, globalConfig, roles, people = []) 
       }
       return a + (role ? role.salary * s.ratio : 0) * months;
     }, 0)
-    : roles.reduce((a, r) => a + r.count * r.salary * months, 0);
+    : roles.reduce((a, r) => a + getEffectiveRoleCount(r, people) * r.salary * months, 0);
   const fixCost = (globalConfig.cSoft + globalConfig.cServer) * months + globalConfig.cMisc;
   const scriptCost = p.scriptCost || 0;
   const total = aiCost + hrCost + fixCost + scriptCost;
@@ -80,7 +89,7 @@ export function fmt(n) {
   return "¥" + n.toLocaleString();
 }
 
-export function getBottleneck(projects, roles) {
+export function getBottleneck(projects, roles, people = []) {
   if (!projects.length) return null;
   let bn = null, mx = 0;
   roles.forEach(r => {
@@ -91,7 +100,7 @@ export function getBottleneck(projects, roles) {
       }
       return a;
     }, 0);
-    const supply = r.count;
+    const supply = getEffectiveRoleCount(r, people);
     const ratio = supply > 0 ? demand / supply : (demand > 0 ? 99 : 0);
     if (ratio > mx) { mx = ratio; if (ratio > 1) bn = r.name; }
   });

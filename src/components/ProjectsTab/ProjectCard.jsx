@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useStore from '../../store';
-import { calcEpisodePoints, calcProjectCost, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
+import { calcEpisodePoints, calcProjectCost, fmt, fmtPoints, getEffectiveRoleCount, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 
 export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDelete, canWrite = true, canDelete = true, departments = [], departmentOptions = departments }) {
   const platforms = useStore(s => s.platforms);
@@ -204,7 +204,7 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
 
             {(project.staffing || []).map((s, sIdx) => {
               const role = roles.find(r => r.name === s.roleName);
-              const count = role ? role.count : 0;
+              const count = role ? getEffectiveRoleCount(role, people) : 0;
               const rolePeople = people.filter(p => p.roleName === s.roleName && (p.status || 'active') !== 'inactive');
               const selectedIds = Array.isArray(s.peopleIds) && s.peopleIds.length > 0
                 ? s.peopleIds

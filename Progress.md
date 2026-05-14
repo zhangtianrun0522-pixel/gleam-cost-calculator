@@ -168,6 +168,8 @@
 - 成员细节补齐后 `npm run build` 通过：93 modules transformed，耗时 904ms；产物 `dist/assets/index-nCoLx1Io.js` 约 646.70 kB，仍有 chunk 大小警告；`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
 - 根据产品口径调整成员栏：组织成员是注册管理账号维度，不再联动制作人员库；已移除人员库“对应成员”下拉，成员栏改为展示注册成员、部门和角色。`npm run build` 通过：93 modules transformed，耗时 942ms；`curl -I --max-time 5 http://127.0.0.1:4173/` 返回 `HTTP/1.1 200 OK`。
 - 修复新增部门交互：空输入时默认创建“新部门 N”，按钮点击后立即乐观显示部门并给出状态提示；兼容模式下本地新增，Supabase 写入失败时回滚并显示错误。`npm run build` 通过：93 modules transformed，耗时 1.39s。
+- 人员资源池计划人数改为联动具体人员：岗位有 active 具体人员时自动使用 active 人数；暂无具体人员时继续使用手填计划人数，避免旧数据口径被清零。
+- 人员资源池联动人数后验证：`node -e "import('./src/calc.js').then(...)"` 通过，确认有 active 具体人员时返回 active 人数、无具体人员时回退手填人数；本地 `npm run build` 与 `vite build --debug` 均无输出卡住，已结束对应进程，构建结果待后续重试。
 - 已完成上线同步：提交 `760e750 Add organization permissions MVP` 已推送到 `origin/codex/org-permissions`；Vercel 生产站 `https://gleam-cost-calculator.vercel.app/` 已部署并返回 `HTTP/2 200`。
 - Supabase 远端已执行组织权限迁移 SQL；迁移前通过 Management API 备份 `public.user_data` 到 `/private/tmp/gleam-supabase-backups/user_data-before-org-permissions-20260512-management.json`，备份包含 2 行。
 - Supabase 迁移后验证：`public.organizations`、`public.organization_members`、`public.organization_projects` 已存在；旧 `public.user_data` 行数仍为 2，未被删除或清零。
