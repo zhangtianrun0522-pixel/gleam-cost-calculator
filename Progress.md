@@ -170,6 +170,7 @@
 - 修复新增部门交互：空输入时默认创建“新部门 N”，按钮点击后立即乐观显示部门并给出状态提示；兼容模式下本地新增，Supabase 写入失败时回滚并显示错误。`npm run build` 通过：93 modules transformed，耗时 1.39s。
 - 人员资源池计划人数改为联动具体人员：岗位有 active 具体人员时自动使用 active 人数；暂无具体人员时继续使用手填计划人数，避免旧数据口径被清零。
 - 人员资源池联动人数后验证：`node -e "import('./src/calc.js').then(...)"` 通过，确认有 active 具体人员时返回 active 人数、无具体人员时回退手填人数；本地 `npm run build` 与 `vite build --debug` 均无输出卡住，已结束对应进程，构建结果待后续重试。
+- 项目人员编排的岗位选择从 `input + datalist` 改为真实下拉框，避免浏览器按当前值过滤导致新增岗位时只能看到一个选项；切换岗位时清空该行已选人员，防止跨岗位残留人员。
 - 已完成上线同步：提交 `760e750 Add organization permissions MVP` 已推送到 `origin/codex/org-permissions`；Vercel 生产站 `https://gleam-cost-calculator.vercel.app/` 已部署并返回 `HTTP/2 200`。
 - Supabase 远端已执行组织权限迁移 SQL；迁移前通过 Management API 备份 `public.user_data` 到 `/private/tmp/gleam-supabase-backups/user_data-before-org-permissions-20260512-management.json`，备份包含 2 行。
 - Supabase 迁移后验证：`public.organizations`、`public.organization_members`、`public.organization_projects` 已存在；旧 `public.user_data` 行数仍为 2，未被删除或清零。

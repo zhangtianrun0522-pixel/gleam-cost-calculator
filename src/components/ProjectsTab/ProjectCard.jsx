@@ -35,8 +35,6 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
     });
   });
 
-  const dlId = "staffing-role-dl-" + project.name.replace(/[^a-zA-Z0-9]/g, "-");
-
   const updateStaffing = (idx, patch) => {
     if (!canWrite) return;
     const newStaffing = [...project.staffing];
@@ -225,7 +223,12 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
               }
               return (
                 <div key={sIdx} className="staffing-row" style={rowBg}>
-                  <input className="si" list={dlId} value={s.roleName} disabled={!canWrite} onChange={e => updateStaffing(sIdx, { roleName: e.target.value })} />
+                  <select className="si" value={s.roleName} disabled={!canWrite} onChange={e => updateStaffing(sIdx, { roleName: e.target.value, peopleIds: [] })}>
+                    {s.roleName && !roles.some(item => item.name === s.roleName) && (
+                      <option value={s.roleName}>{s.roleName}</option>
+                    )}
+                    {roles.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+                  </select>
                   <input className="si" type="number" step={0.1} min={0} value={s.ratio} disabled={!canWrite} onChange={e => updateStaffing(sIdx, { ratio: +e.target.value })} style={{ textAlign: 'center' }} />
                   <div style={{ fontSize: 12, textAlign: 'center', color: role ? '#1a1a1a' : '#854F0B' }}>{count > 0 ? count : '—'}</div>
                   <div style={{ fontSize: 12, textAlign: 'center', color: '#888' }}>{gDemandStr}</div>
@@ -255,10 +258,6 @@ export default function ProjectCard({ project, isOpen, onToggle, onUpdate, onDel
                 </div>
               );
             })}
-
-            <datalist id={dlId}>
-              {roles.map(r => <option key={r.name} value={r.name} />)}
-            </datalist>
           </div>
 
           <div style={{ height: 1, background: '#f0f0f0', margin: '12px 0' }} />
