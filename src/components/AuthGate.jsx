@@ -42,32 +42,35 @@ export default function AuthGate({ children }) {
   const [syncStatus, setSyncStatus] = useState('idle');
   const [dataError, setDataError] = useState('');
 
-  const platforms = useStore((s) => s.platforms);
-  const roles = useStore((s) => s.roles);
-  const globalConfig = useStore((s) => s.globalConfig);
-  const projects = useStore((s) => s.projects);
-  const templates = useStore((s) => s.templates);
-  const people = useStore((s) => s.people);
-  const pointRecords = useStore((s) => s.pointRecords);
-  const productionProgress = useStore((s) => s.productionProgress);
-  const orgContext = useStore((s) => s.orgContext);
-  const setPlatforms = useStore((s) => s.setPlatforms);
-  const setRoles = useStore((s) => s.setRoles);
-  const setGlobalConfig = useStore((s) => s.setGlobalConfig);
-  const setProjects = useStore((s) => s.setProjects);
-  const setTemplates = useStore((s) => s.setTemplates);
-  const setPeople = useStore((s) => s.setPeople);
-  const setPointRecords = useStore((s) => s.setPointRecords);
-  const setProductionProgress = useStore((s) => s.setProductionProgress);
-  const setOrgContext = useStore((s) => s.setOrgContext);
-  const setDepartments = useStore((s) => s.setDepartments);
-  const setOrganizationMembers = useStore((s) => s.setOrganizationMembers);
-  const setOrganizationInvites = useStore((s) => s.setOrganizationInvites);
-  const resetStore = useStore((s) => s.resetStore);
-
   const debounceRef = useRef(null);
   const userIdRef = useRef(null);
   const loadSeqRef = useRef(0);
+  const userRef = useRef(null);
+  const dataReadyRef = useRef(false);
+  const syncStatusRef = useRef(syncStatus);
+
+  useEffect(() => {
+    syncStatusRef.current = syncStatus;
+  }, [syncStatus]);
+
+  const getActions = () => {
+    const state = useStore.getState();
+    return {
+      setPlatforms: state.setPlatforms,
+      setRoles: state.setRoles,
+      setGlobalConfig: state.setGlobalConfig,
+      setProjects: state.setProjects,
+      setTemplates: state.setTemplates,
+      setPeople: state.setPeople,
+      setPointRecords: state.setPointRecords,
+      setProductionProgress: state.setProductionProgress,
+      setOrgContext: state.setOrgContext,
+      setDepartments: state.setDepartments,
+      setOrganizationMembers: state.setOrganizationMembers,
+      setOrganizationInvites: state.setOrganizationInvites,
+      resetStore: state.resetStore,
+    };
+  };
 
   const loadUserData = async (sessionUser) => {
     const loadSeq = loadSeqRef.current + 1;
@@ -100,14 +103,15 @@ export default function AuthGate({ children }) {
         setSyncStatus('error');
         return;
       }
-      resetStore();
-      setOrgContext(context);
+      const actions = getActions();
+      actions.resetStore();
+      actions.setOrgContext(context);
       if (legacyResult.data) {
-        applyCloudData(legacyResult.data, { setPlatforms, setRoles, setGlobalConfig, setProjects, setTemplates, setPeople, setPointRecords, setProductionProgress });
+        applyCloudData(legacyResult.data, actions);
       }
-      setDepartments([]);
-      setOrganizationMembers([]);
-      setOrganizationInvites([]);
+      actions.setDepartments([]);
+      actions.setOrganizationMembers([]);
+      actions.setOrganizationInvites([]);
       setMessage('');
       setSyncStatus(legacyResult.data ? 'saved' : 'idle');
       userIdRef.current = sessionUser.id;
@@ -127,15 +131,17 @@ export default function AuthGate({ children }) {
       return;
     } else {
       if (data?.state) {
-        resetStore();
-        setOrgContext(context);
-        applyCloudData(data.state, { setPlatforms, setRoles, setGlobalConfig, setProjects, setTemplates, setPeople, setPointRecords, setProductionProgress });
-        setDepartments(data.departments || []);
-        setOrganizationMembers(data.members || []);
-        setOrganizationInvites(data.invites || []);
+        const actions = getActions();
+        actions.resetStore();
+        actions.setOrgContext(context);
+        applyCloudData(data.state, actions);
+        actions.setDepartments(data.departments || []);
+        actions.setOrganizationMembers(data.members || []);
+        actions.setOrganizationInvites(data.invites || []);
       } else {
-        resetStore();
-        setOrgContext(context);
+        const actions = getActions();
+        actions.resetStore();
+        actions.setOrgContext(context);
       }
       setMessage('');
       setSyncStatus(data ? 'saved' : 'idle');
@@ -149,6 +155,14 @@ export default function AuthGate({ children }) {
     setAuthReady(true);
     await loadUserData(sessionUser);
   };
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    dataReadyRef.current = dataReady;
+  }, [dataReady]);
 
   useEffect(() => {
     let alive = true;
@@ -192,8 +206,9 @@ export default function AuthGate({ children }) {
       } else if (event === 'SIGNED_OUT') {
         loadSeqRef.current += 1;
         userIdRef.current = null;
-        resetStore();
-        setOrgContext(null);
+        const actions = getActions();
+        actions.resetStore();
+        actions.setOrgContext(null);
         setUser(null);
         setDataReady(false);
         setDataError('');
@@ -211,32 +226,45 @@ export default function AuthGate({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!user || !dataReady || userIdRef.current !== user.id || !orgContext?.organization?.id) return;
-    const access = getWriteAccess(orgContext.member);
-    if (!access.canWriteAny) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setSyncStatus('syncing');
-    debounceRef.current = setTimeout(async () => {
-      const payload = {
-        platforms,
-        roles,
-        globalConfig,
-        projects,
-        templates,
-        people,
-        pointRecords,
-        productionProgress,
-        departments: useStore.getState().departments,
-      };
-      const { error } = orgContext.legacyMode
-        ? await saveToCloud(supabase, user.id, payload)
-        : access.canWriteGlobal
-          ? await saveOrgData(supabase, orgContext.organization.id, payload)
-          : await saveScopedOrgData(supabase, orgContext.organization.id, payload);
-      setSyncStatus(error ? 'error' : 'saved');
-    }, 1200);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [platforms, roles, globalConfig, projects, templates, people, pointRecords, productionProgress, user, dataReady, orgContext]);
+    const unsubscribe = useStore.subscribe((state) => {
+      const currentUser = userRef.current;
+      const currentOrgContext = state.orgContext;
+      if (!currentUser || !dataReadyRef.current || userIdRef.current !== currentUser.id || !currentOrgContext?.organization?.id) return;
+      const access = getWriteAccess(currentOrgContext.member);
+      if (!access.canWriteAny) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(async () => {
+        const latest = useStore.getState();
+        const latestUser = userRef.current;
+        const latestOrgContext = latest.orgContext;
+        if (!latestUser || !dataReadyRef.current || userIdRef.current !== latestUser.id || !latestOrgContext?.organization?.id) return;
+        const latestAccess = getWriteAccess(latestOrgContext.member);
+        if (!latestAccess.canWriteAny) return;
+        if (syncStatusRef.current !== 'syncing') setSyncStatus('syncing');
+        const payload = {
+          platforms: latest.platforms,
+          roles: latest.roles,
+          globalConfig: latest.globalConfig,
+          projects: latest.projects,
+          templates: latest.templates,
+          people: latest.people,
+          pointRecords: latest.pointRecords,
+          productionProgress: latest.productionProgress,
+          departments: latest.departments,
+        };
+        const { error } = latestOrgContext.legacyMode
+          ? await saveToCloud(supabase, latestUser.id, payload)
+          : latestAccess.canWriteGlobal
+            ? await saveOrgData(supabase, latestOrgContext.organization.id, payload)
+            : await saveScopedOrgData(supabase, latestOrgContext.organization.id, payload);
+        setSyncStatus(error ? 'error' : 'saved');
+      }, 1200);
+    });
+    return () => {
+      unsubscribe();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

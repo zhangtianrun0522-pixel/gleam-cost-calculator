@@ -176,3 +176,6 @@
 - 已完成上线同步：提交 `760e750 Add organization permissions MVP` 已推送到 `origin/codex/org-permissions`；Vercel 生产站 `https://gleam-cost-calculator.vercel.app/` 已部署并返回 `HTTP/2 200`。
 - Supabase 远端已执行组织权限迁移 SQL；迁移前通过 Management API 备份 `public.user_data` 到 `/private/tmp/gleam-supabase-backups/user_data-before-org-permissions-20260512-management.json`，备份包含 2 行。
 - Supabase 迁移后验证：`public.organizations`、`public.organization_members`、`public.organization_projects` 已存在；旧 `public.user_data` 行数仍为 2，未被删除或清零。
+- 本轮针对线上全局配置卡顿：将自动云同步从 `AuthGate` 的 React 状态订阅改为 Zustand 外部订阅，避免每次全局数据输入都触发整个 AuthGate/App 重新渲染；仍保留 1.2 秒防抖保存。
+- 修复全局配置「人员资源池」一级岗位编辑卡顿与人员配置 bug：岗位名称、计划人数、月薪、日工时改为行内草稿，失焦或回车后一次性提交；岗位改名时一次性同步该岗位下人员的 `roleName`，避免逐字改名导致人员绑定抖动或丢失。
+- 本轮验证：`git diff --check` 通过；`npm run build`、Node/esbuild/Babel 本地语法检查均出现无输出悬挂，已结束对应进程，因此尚未获得完整生产构建结果。剩余风险是需要在本地 Node/Vite 恢复正常后补跑构建和浏览器交互验证。

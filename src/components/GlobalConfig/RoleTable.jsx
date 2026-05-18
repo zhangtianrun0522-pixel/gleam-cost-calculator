@@ -109,6 +109,112 @@ function PersonRow({ person, selectedRole, canWrite, updatePerson, deletePerson 
   );
 }
 
+function RoleRow({ role, index, people, canWrite, updateRole, deleteRole, setPeople, onManage }) {
+  const rolePeople = useMemo(
+    () => people.filter(person => person.roleName === role.name),
+    [people, role.name]
+  );
+  const activeCount = getActiveRolePeople(people, role.name).length;
+  const effectiveCount = getEffectiveRoleCount(role, people);
+  const isLinkedCount = activeCount > 0;
+  const [draft, setDraft] = useState({
+    name: role.name || "",
+    count: String(effectiveCount ?? 0),
+    salary: role.salary ?? "",
+    dayHrs: role.dayHrs ?? "",
+  });
+
+  useEffect(() => {
+    setDraft({
+      name: role.name || "",
+      count: String(effectiveCount ?? 0),
+      salary: role.salary ?? "",
+      dayHrs: role.dayHrs ?? "",
+    });
+  }, [role.name, role.count, role.salary, role.dayHrs, effectiveCount]);
+
+  const commitDraft = () => {
+    if (!canWrite) return;
+    const nextName = draft.name.trim() || role.name || "未命名岗位";
+    const patch = {
+      name: nextName,
+      salary: Number(draft.salary) || 0,
+      dayHrs: Number(draft.dayHrs) || 0,
+    };
+    if (!isLinkedCount) patch.count = Math.max(Number(draft.count) || 0, 0);
+
+    const nameChanged = nextName !== role.name;
+    const roleChanged = (
+      patch.name !== role.name
+      || patch.salary !== role.salary
+      || patch.dayHrs !== role.dayHrs
+      || (!isLinkedCount && patch.count !== role.count)
+    );
+    if (!nameChanged && !roleChanged) return;
+    if (nameChanged) {
+      setPeople(people.map(person => person.roleName === role.name ? { ...person, roleName: nextName } : person));
+    }
+    updateRole(index, patch);
+  };
+
+  const commitOnEnter = (event) => {
+    if (event.key === "Enter") event.currentTarget.blur();
+  };
+
+  return (
+    <div className="res-row role-row-grid">
+      <input
+        className="si"
+        value={draft.name}
+        disabled={!canWrite}
+        onChange={e => setDraft({ ...draft, name: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <input
+        className="si"
+        type="number"
+        value={isLinkedCount ? effectiveCount : draft.count}
+        disabled={!canWrite || isLinkedCount}
+        min="0"
+        style={{ textAlign: "center" }}
+        title={isLinkedCount ? "已按具体人员自动统计" : "未维护具体人员时使用手动计划人数"}
+        onChange={e => setDraft({ ...draft, count: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <input
+        className="si"
+        type="number"
+        value={draft.salary}
+        disabled={!canWrite}
+        onChange={e => setDraft({ ...draft, salary: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <input
+        className="si"
+        type="number"
+        value={draft.dayHrs}
+        disabled={!canWrite}
+        style={{ textAlign: "center" }}
+        onChange={e => setDraft({ ...draft, dayHrs: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <div style={{ textAlign: "center", fontSize: 12, color: "#888" }}>
+        {activeCount}/{rolePeople.length}
+      </div>
+      <button className="addbtn" onClick={() => onManage(role.name)}>管理</button>
+      <button className="delbtn" disabled={!canWrite} onClick={() => {
+        if (!confirm("删除岗位「" + role.name + "」？该岗位下人员会从人员库移除。")) return;
+        setPeople(people.filter(person => person.roleName !== role.name));
+        deleteRole(index);
+      }}>×</button>
+    </div>
+  );
+}
+
 export default function RoleTable() {
   const roles = useStore(s => s.roles);
   const people = useStore(s => s.people);
@@ -128,6 +234,10 @@ export default function RoleTable() {
     () => people.filter(p => p.roleName === selectedRoleName),
     [people, selectedRoleName]
   );
+
+  useEffect(() => {
+    if (selectedRoleName && !selectedRole) setSelectedRoleName("");
+  }, [selectedRoleName, selectedRole]);
 
   const handleAddPerson = () => {
     if (!selectedRole || !canWrite) return;
@@ -203,38 +313,19 @@ export default function RoleTable() {
         <span></span>
         <span></span>
       </div>
-      {roles.map((r, i) => {
-        const rolePeople = people.filter(p => p.roleName === r.name);
-        const activeCount = getActiveRolePeople(people, r.name).length;
-        const effectiveCount = getEffectiveRoleCount(r, people);
-        const isLinkedCount = activeCount > 0;
-        return (
-          <div className="res-row role-row-grid" key={i}>
-            <input className="si" value={r.name} disabled={!canWrite}
-              onChange={e => {
-                const nextName = e.target.value;
-                setPeople(people.map(person => person.roleName === r.name ? { ...person, roleName: nextName } : person));
-                updateRole(i, { name: nextName });
-              }} />
-            <input className="si" type="number" value={effectiveCount} disabled={!canWrite || isLinkedCount} min="0" style={{ textAlign: "center" }}
-              title={isLinkedCount ? "已按具体人员自动统计" : "未维护具体人员时使用手动计划人数"}
-              onChange={e => updateRole(i, { count: Number(e.target.value) })} />
-            <input className="si" type="number" value={r.salary} disabled={!canWrite}
-              onChange={e => updateRole(i, { salary: Number(e.target.value) })} />
-            <input className="si" type="number" value={r.dayHrs} disabled={!canWrite} style={{ textAlign: "center" }}
-              onChange={e => updateRole(i, { dayHrs: Number(e.target.value) })} />
-            <div style={{ textAlign: "center", fontSize: 12, color: "#888" }}>
-              {activeCount}/{rolePeople.length}
-            </div>
-            <button className="addbtn" onClick={() => setSelectedRoleName(r.name)}>管理</button>
-            <button className="delbtn" disabled={!canWrite} onClick={() => {
-              if (!confirm("删除岗位「" + r.name + "」？该岗位下人员会从人员库移除。")) return;
-              setPeople(people.filter(person => person.roleName !== r.name));
-              deleteRole(i);
-            }}>×</button>
-          </div>
-        );
-      })}
+      {roles.map((r, i) => (
+        <RoleRow
+          key={`${r.name}-${i}`}
+          role={r}
+          index={i}
+          people={people}
+          canWrite={canWrite}
+          updateRole={updateRole}
+          deleteRole={deleteRole}
+          setPeople={setPeople}
+          onManage={setSelectedRoleName}
+        />
+      ))}
       <div style={{ marginTop: 8, fontSize: 11, color: "#bbb" }}>
         一级只维护岗位口径，具体人员在二级页维护；制作组模板仍按岗位比例搭建
       </div>
