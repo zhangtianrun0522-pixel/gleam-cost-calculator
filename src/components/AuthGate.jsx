@@ -17,6 +17,7 @@ function applyCloudData(data, setters) {
 
 const AUTH_INIT_TIMEOUT_MS = 4000;
 const DATA_LOAD_TIMEOUT_MS = 8000;
+const AUTH_ACTION_TIMEOUT_MS = 10000;
 
 function withTimeout(promise, ms, errorMessage) {
   let timer = null;
@@ -249,23 +250,31 @@ export default function AuthGate({ children }) {
     setMessage('');
 
     if (mode === 'login') {
-      const { error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email: trimmedEmail, password }),
+        AUTH_ACTION_TIMEOUT_MS,
+        '登录请求超时，请检查网络后重试。'
+      ).catch((err) => ({ error: err }));
       setLoading(false);
       if (error) {
-        setMessage('邮箱或密码不正确，或账号尚未完成邮箱验证。');
+        setMessage(error.message?.includes('超时') ? error.message : '邮箱或密码不正确，或账号尚未完成邮箱验证。');
       }
       return;
     }
 
     if (mode === 'register') {
-      const { error } = await supabase.auth.signUp({
-        email: trimmedEmail,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: { team_name: teamName.trim() },
-        },
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { team_name: teamName.trim() },
+          },
+        }),
+        AUTH_ACTION_TIMEOUT_MS,
+        '注册请求超时，请检查网络后重试。'
+      ).catch((err) => ({ error: err }));
       setLoading(false);
       if (error) {
         setMessage(error.message || '注册失败，请稍后重试。');
@@ -276,9 +285,13 @@ export default function AuthGate({ children }) {
     }
 
     if (mode === 'forgot') {
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: window.location.origin,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(trimmedEmail, {
+          redirectTo: window.location.origin,
+        }),
+        AUTH_ACTION_TIMEOUT_MS,
+        '重置请求超时，请检查网络后重试。'
+      ).catch((err) => ({ error: err }));
       setLoading(false);
       if (error) {
         setMessage(error.message || '发送重置邮件失败。');
@@ -294,7 +307,11 @@ export default function AuthGate({ children }) {
         setMessage('新密码至少需要 6 位。');
         return;
       }
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const { error } = await withTimeout(
+        supabase.auth.updateUser({ password: newPassword }),
+        AUTH_ACTION_TIMEOUT_MS,
+        '更新密码请求超时，请检查网络后重试。'
+      ).catch((err) => ({ error: err }));
       setLoading(false);
       if (error) {
         setMessage(error.message || '更新密码失败。');
@@ -309,7 +326,13 @@ export default function AuthGate({ children }) {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await withTimeout(
+      supabase.auth.signOut(),
+      AUTH_ACTION_TIMEOUT_MS,
+      '退出请求超时，请刷新页面重试。'
+    ).catch((err) => {
+      setMessage(err.message || '退出失败，请刷新页面重试。');
+    });
   };
 
   if (!authReady) {

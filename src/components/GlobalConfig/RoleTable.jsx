@@ -1,7 +1,113 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useStore from "../../store";
 import { getWriteAccess } from "../../sync";
 import { getActiveRolePeople, getEffectiveRoleCount } from "../../calc";
+
+function PersonRow({ person, selectedRole, canWrite, updatePerson, deletePerson }) {
+  const [draft, setDraft] = useState({
+    name: person.name || "",
+    salary: person.salary ?? "",
+    status: person.status || "active",
+    pointsAccount: person.pointsAccount || "",
+    note: person.note || "",
+  });
+
+  useEffect(() => {
+    setDraft({
+      name: person.name || "",
+      salary: person.salary ?? "",
+      status: person.status || "active",
+      pointsAccount: person.pointsAccount || "",
+      note: person.note || "",
+    });
+  }, [person.id, person.name, person.salary, person.status, person.pointsAccount, person.note]);
+
+  const commitDraft = () => {
+    if (!canWrite) return;
+    const patch = {
+      name: draft.name,
+      salary: draft.salary === "" ? "" : Number(draft.salary),
+      status: draft.status,
+      pointsAccount: draft.pointsAccount,
+      note: draft.note,
+    };
+    const current = {
+      name: person.name || "",
+      salary: person.salary ?? "",
+      status: person.status || "active",
+      pointsAccount: person.pointsAccount || "",
+      note: person.note || "",
+    };
+    if (
+      patch.name === current.name
+      && patch.salary === current.salary
+      && patch.status === current.status
+      && patch.pointsAccount === current.pointsAccount
+      && patch.note === current.note
+    ) return;
+    updatePerson(person.id, patch);
+  };
+
+  const commitOnEnter = (event) => {
+    if (event.key === "Enter") event.currentTarget.blur();
+  };
+
+  return (
+    <div className="person-row">
+      <input
+        className="si"
+        value={draft.name}
+        disabled={!canWrite}
+        onChange={e => setDraft({ ...draft, name: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <input
+        className="si"
+        type="number"
+        disabled={!canWrite}
+        placeholder={String(selectedRole.salary || 0)}
+        value={draft.salary}
+        onChange={e => setDraft({ ...draft, salary: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <select
+        className="si"
+        value={draft.status}
+        disabled={!canWrite}
+        onChange={e => {
+          const status = e.target.value;
+          setDraft({ ...draft, status });
+          updatePerson(person.id, { status });
+        }}
+      >
+        <option value="active">可用</option>
+        <option value="busy">忙碌</option>
+        <option value="inactive">停用</option>
+      </select>
+      <input
+        className="si"
+        value={draft.pointsAccount}
+        disabled={!canWrite}
+        placeholder="平台账号"
+        onChange={e => setDraft({ ...draft, pointsAccount: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <input
+        className="si"
+        value={draft.note}
+        disabled={!canWrite}
+        placeholder="备注"
+        onChange={e => setDraft({ ...draft, note: e.target.value })}
+        onBlur={commitDraft}
+        onKeyDown={commitOnEnter}
+      />
+      <button className="delbtn" disabled={!canWrite} onClick={() => { if (confirm("删除人员「" + (draft.name || person.name) + "」？")) deletePerson(person.id); }}>×</button>
+    </div>
+  );
+}
 
 export default function RoleTable() {
   const roles = useStore(s => s.roles);
@@ -65,25 +171,14 @@ export default function RoleTable() {
         )}
 
         {selectedPeople.map((person) => (
-          <div className="person-row" key={person.id}>
-            <input className="si" value={person.name} disabled={!canWrite} onChange={e => updatePerson(person.id, { name: e.target.value })} />
-            <input
-              className="si"
-              type="number"
-              disabled={!canWrite}
-              placeholder={String(selectedRole.salary || 0)}
-              value={person.salary ?? ""}
-              onChange={e => updatePerson(person.id, { salary: e.target.value === "" ? "" : Number(e.target.value) })}
-            />
-            <select className="si" value={person.status || "active"} disabled={!canWrite} onChange={e => updatePerson(person.id, { status: e.target.value })}>
-              <option value="active">可用</option>
-              <option value="busy">忙碌</option>
-              <option value="inactive">停用</option>
-            </select>
-            <input className="si" value={person.pointsAccount || ""} disabled={!canWrite} placeholder="平台账号" onChange={e => updatePerson(person.id, { pointsAccount: e.target.value })} />
-            <input className="si" value={person.note || ""} disabled={!canWrite} placeholder="备注" onChange={e => updatePerson(person.id, { note: e.target.value })} />
-            <button className="delbtn" disabled={!canWrite} onClick={() => { if (confirm("删除人员「" + person.name + "」？")) deletePerson(person.id); }}>×</button>
-          </div>
+          <PersonRow
+            key={person.id}
+            person={person}
+            selectedRole={selectedRole}
+            canWrite={canWrite}
+            updatePerson={updatePerson}
+            deletePerson={deletePerson}
+          />
         ))}
       </div>
     );
