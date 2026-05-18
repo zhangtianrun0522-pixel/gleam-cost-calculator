@@ -228,15 +228,15 @@ export default function RoleTable() {
   const orgContext = useStore(s => s.orgContext);
   const canWrite = getWriteAccess(orgContext?.member).canWriteGlobal;
 
-  const [selectedRoleName, setSelectedRoleName] = useState("");
-  const selectedRole = roles.find(r => r.name === selectedRoleName);
+  const [selectedRoleName, setSelectedRoleName] = useState(null);
+  const selectedRole = selectedRoleName === null ? null : roles.find(r => r.name === selectedRoleName);
   const selectedPeople = useMemo(
     () => people.filter(p => p.roleName === selectedRoleName),
     [people, selectedRoleName]
   );
 
   useEffect(() => {
-    if (selectedRoleName && !selectedRole) setSelectedRoleName("");
+    if (selectedRoleName !== null && !selectedRole) setSelectedRoleName(null);
   }, [selectedRoleName, selectedRole]);
 
   const handleAddPerson = () => {
@@ -256,7 +256,7 @@ export default function RoleTable() {
       <div className="card">
         <div className="role-detail-head">
           <div>
-            <button className="linkbtn" onClick={() => setSelectedRoleName("")}>← 返回岗位资源池</button>
+            <button className="linkbtn" type="button" onClick={() => setSelectedRoleName(null)}>← 返回岗位资源池</button>
             <div className="stitle" style={{ marginTop: 10, marginBottom: 4 }}>{selectedRole.name} · 人员管理</div>
             <div style={{ fontSize: 12, color: "#888" }}>
               默认薪资 {Number(selectedRole.salary || 0).toLocaleString()} 元；人员薪资为空时继承岗位默认值
