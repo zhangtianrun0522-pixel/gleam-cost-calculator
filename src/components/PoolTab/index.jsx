@@ -1,12 +1,5 @@
 import useStore from '../../store';
-import { calcProjectCost, fmt, getEffectiveRoleCount } from '../../calc';
-
-function getSelectedPeople(staffing, people, roleName) {
-  const rolePeople = people.filter(person => person.roleName === roleName && (person.status || 'active') !== 'inactive');
-  const ids = staffing?.peopleIds || [];
-  if (ids.length === 0) return rolePeople;
-  return ids.map(id => people.find(person => person.id === id)).filter(Boolean);
-}
+import { calcProjectCost, fmt, getEffectiveRoleCount, getStaffingMonthlyCost } from '../../calc';
 
 export default function PoolTab() {
   const projects = useStore(s => s.projects);
@@ -77,7 +70,7 @@ export default function PoolTab() {
       </div>
 
       <div className="card">
-        <div className="stitle">人力成本跨项目分摊（按 staffing ratio）</div>
+        <div className="stitle">人力成本跨项目归集（固定工资）</div>
         {(!projects.length || !roles.length)
           ? <div style={{ fontSize: 13, color: '#aaa', padding: '8px 0' }}>暂无数据</div>
           : (
@@ -97,11 +90,7 @@ export default function PoolTab() {
                       <td style={{ padding: '5px 6px', color: '#888' }}>{r.name}</td>
                       {projects.map((p, pi) => {
                         const s = p.staffing?.find(x => x.roleName === r.name);
-                        const selectedPeople = s ? getSelectedPeople(s, people, r.name) : [];
-                        const avgSalary = selectedPeople.length > 0
-                          ? selectedPeople.reduce((sum, person) => sum + (Number(person.salary) > 0 ? Number(person.salary) : Number(r.salary || 0)), 0) / selectedPeople.length
-                          : Number(r.salary || 0);
-                        const cost = s ? s.ratio * avgSalary * (p.days / 30) : 0;
+                        const cost = s ? getStaffingMonthlyCost(s, r, people) * (p.days / 30) : 0;
                         return (
                           <td key={pi} style={{ textAlign: 'right', padding: '5px 6px' }}>
                             {cost > 0 ? fmt(cost) : <span style={{ color: '#ccc' }}>—</span>}

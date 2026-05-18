@@ -1,4 +1,4 @@
-function getSelectedPeople(staffing, people) {
+export function getSelectedPeopleForStaffing(staffing, people) {
   const rolePeople = people.filter(person => person.roleName === staffing.roleName && (person.status || 'active') !== 'inactive');
   const ids = staffing.peopleIds || [];
   if (ids.length === 0) return rolePeople;
@@ -26,6 +26,14 @@ export function getRoleMonthlyCost(role, people = []) {
   return getEffectiveRoleCount(role, people) * (Number(role?.salary) || 0);
 }
 
+export function getStaffingMonthlyCost(staffing, role, people = []) {
+  const selectedPeople = getSelectedPeopleForStaffing(staffing, people);
+  if (selectedPeople.length > 0) {
+    return selectedPeople.reduce((sum, person) => sum + getPersonSalary(person, role), 0);
+  }
+  return getRoleMonthlyCost(role, []);
+}
+
 const aiPointKeys = ['aiRate', 'aiDur', 'shotRatio', 'aiImgPts', 'aiImgN'];
 
 export function getProjectAiConfig(project, globalConfig) {
@@ -51,12 +59,7 @@ export function calcProjectCost(p, platforms, globalConfig, roles, people = []) 
   const hrCost = p.staffing && p.staffing.length > 0
     ? p.staffing.reduce((a, s) => {
       const role = roles.find(r => r.name === s.roleName);
-      const selectedPeople = getSelectedPeople(s, people);
-      if (selectedPeople.length > 0) {
-        const avgSalary = selectedPeople.reduce((sum, person) => sum + getPersonSalary(person, role), 0) / selectedPeople.length;
-        return a + avgSalary * (Number(s.ratio) || 0) * months;
-      }
-      return a + (role ? role.salary * s.ratio : 0) * months;
+      return a + getStaffingMonthlyCost(s, role, people) * months;
     }, 0)
     : roles.reduce((a, r) => a + getRoleMonthlyCost(r, people) * months, 0);
   const fixCost = (globalConfig.cSoft + globalConfig.cServer) * months + globalConfig.cMisc;

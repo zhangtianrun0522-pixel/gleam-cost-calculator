@@ -24,17 +24,21 @@ export default function CurveTab() {
   const idx = Math.min(selIdx, Math.max(projects.length - 1, 0));
   const p = projects[idx];
   const projectCosts = projects.map(project => calcProjectCost(project, platforms, globalConfig, roles, people));
+  const globalHrCost = roles.reduce((sum, role) => sum + getRoleMonthlyCost(role, people), 0);
   const totalEps = projects.reduce((sum, project) => sum + (Number(project.eps) || 0), 0);
-  const totalDays = projects.reduce((sum, project) => sum + (Number(project.days) || 0), 0);
-  const globalCost = projectCosts.reduce((acc, cost) => ({
+  const globalVariableCost = projectCosts.reduce((acc, cost) => ({
     aiCost: acc.aiCost + cost.aiCost,
-    hrCost: acc.hrCost + cost.hrCost,
     fixCost: acc.fixCost + cost.fixCost,
     scriptCost: acc.scriptCost + cost.scriptCost,
-    total: acc.total + cost.total,
     rev: acc.rev + cost.rev,
-    net: acc.net + cost.net,
-  }), { aiCost: 0, hrCost: 0, fixCost: 0, scriptCost: 0, total: 0, rev: 0, net: 0 });
+  }), { aiCost: 0, fixCost: 0, scriptCost: 0, rev: 0 });
+  const globalTotalCost = globalVariableCost.aiCost + globalVariableCost.fixCost + globalVariableCost.scriptCost + globalHrCost;
+  const globalCost = {
+    ...globalVariableCost,
+    hrCost: globalHrCost,
+    total: globalTotalCost,
+    net: globalVariableCost.rev - globalTotalCost,
+  };
   const selectedCost = p ? calcProjectCost(p, platforms, globalConfig, roles, people) : null;
   const isGlobal = scope === 'global';
   const c = isGlobal ? globalCost : selectedCost;
@@ -55,7 +59,7 @@ export default function CurveTab() {
     const dTot = [], dAi = [], dHr = [], dFix = [];
     const dCompHr = [], dCompAi = [];
     const globalHrBase = isGlobal
-      ? roles.reduce((a, r) => a + getRoleMonthlyCost(r, people) * (Math.max(totalDays, 30) / 30), 0)
+      ? globalHrCost
       : roles.reduce((a, r) => a + getRoleMonthlyCost(r, people) * (p.days / 30), 0);
 
     const calcScaledGlobalCost = (eps) => {
@@ -150,7 +154,7 @@ export default function CurveTab() {
       if (pieInst.current) { pieInst.current.destroy(); pieInst.current = null; }
       if (compInst.current) { compInst.current.destroy(); compInst.current = null; }
     };
-  }, [idx, scope, seriesVis, projects, platforms, roles, people, globalConfig, c, isGlobal, p, analysisEps, totalDays]);
+  }, [idx, scope, seriesVis, projects, platforms, roles, people, globalConfig, c, isGlobal, p, analysisEps, globalHrCost]);
 
   if (!projects.length || !c) return <div className="card" style={{ textAlign: 'center', color: '#aaa', padding: 20 }}>暂无项目，请先在「项目管理」中添加</div>;
 
