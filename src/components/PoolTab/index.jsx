@@ -1,6 +1,13 @@
 import useStore from '../../store';
 import { calcProjectCost, fmt, getEffectiveRoleCount } from '../../calc';
 
+function getSelectedPeople(staffing, people, roleName) {
+  const rolePeople = people.filter(person => person.roleName === roleName && (person.status || 'active') !== 'inactive');
+  const ids = staffing?.peopleIds || [];
+  if (ids.length === 0) return rolePeople;
+  return ids.map(id => people.find(person => person.id === id)).filter(Boolean);
+}
+
 export default function PoolTab() {
   const projects = useStore(s => s.projects);
   const platforms = useStore(s => s.platforms);
@@ -90,7 +97,7 @@ export default function PoolTab() {
                       <td style={{ padding: '5px 6px', color: '#888' }}>{r.name}</td>
                       {projects.map((p, pi) => {
                         const s = p.staffing?.find(x => x.roleName === r.name);
-                        const selectedPeople = (s?.peopleIds || []).map(id => people.find(person => person.id === id)).filter(Boolean);
+                        const selectedPeople = s ? getSelectedPeople(s, people, r.name) : [];
                         const avgSalary = selectedPeople.length > 0
                           ? selectedPeople.reduce((sum, person) => sum + (Number(person.salary) > 0 ? Number(person.salary) : Number(r.salary || 0)), 0) / selectedPeople.length
                           : Number(r.salary || 0);

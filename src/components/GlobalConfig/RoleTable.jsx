@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import useStore from "../../store";
 import { getWriteAccess } from "../../sync";
-import { getActiveRolePeople, getEffectiveRoleCount } from "../../calc";
+import { getActiveRolePeople, getEffectiveRoleCount, getRoleMonthlyCost } from "../../calc";
 
 function PersonRow({ person, selectedRole, canWrite, updatePerson, deletePerson }) {
   const [draft, setDraft] = useState({
@@ -117,6 +117,8 @@ function RoleRow({ role, index, people, canWrite, updateRole, deleteRole, setPeo
   const activeCount = getActiveRolePeople(people, role.name).length;
   const effectiveCount = getEffectiveRoleCount(role, people);
   const isLinkedCount = activeCount > 0;
+  const monthlyCost = getRoleMonthlyCost(role, people);
+  const hasPeople = rolePeople.length > 0;
   const [draft, setDraft] = useState({
     name: role.name || "",
     count: String(effectiveCount ?? 0),
@@ -138,15 +140,15 @@ function RoleRow({ role, index, people, canWrite, updateRole, deleteRole, setPeo
     const nextName = draft.name.trim() || role.name || "未命名岗位";
     const patch = {
       name: nextName,
-      salary: Number(draft.salary) || 0,
       dayHrs: Number(draft.dayHrs) || 0,
     };
+    if (!hasPeople) patch.salary = Number(draft.salary) || 0;
     if (!isLinkedCount) patch.count = Math.max(Number(draft.count) || 0, 0);
 
     const nameChanged = nextName !== role.name;
     const roleChanged = (
       patch.name !== role.name
-      || patch.salary !== role.salary
+      || (!hasPeople && patch.salary !== role.salary)
       || patch.dayHrs !== role.dayHrs
       || (!isLinkedCount && patch.count !== role.count)
     );
@@ -186,8 +188,9 @@ function RoleRow({ role, index, people, canWrite, updateRole, deleteRole, setPeo
       <input
         className="si"
         type="number"
-        value={draft.salary}
-        disabled={!canWrite}
+        value={hasPeople ? monthlyCost : draft.salary}
+        disabled={!canWrite || hasPeople}
+        title={hasPeople ? "已按二级人员工资自动汇总；个人工资为空时继承岗位默认工资" : "未维护具体人员时使用计划人数 × 岗位默认工资"}
         onChange={e => setDraft({ ...draft, salary: e.target.value })}
         onBlur={commitDraft}
         onKeyDown={commitOnEnter}
@@ -307,7 +310,7 @@ export default function RoleTable() {
       <div className="res-hdr role-row-grid">
         <span style={{ fontSize: 10, color: "#aaa" }}>岗位名称</span>
         <span style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>计划人数</span>
-        <span style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>月薪（元）</span>
+        <span style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>岗位月薪合计</span>
         <span style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>日工时(h)</span>
         <span style={{ fontSize: 10, color: "#aaa", textAlign: "center" }}>具体人员</span>
         <span></span>
@@ -327,7 +330,7 @@ export default function RoleTable() {
         />
       ))}
       <div style={{ marginTop: 8, fontSize: 11, color: "#bbb" }}>
-        一级只维护岗位口径，具体人员在二级页维护；制作组模板仍按岗位比例搭建
+        一级显示岗位资源总量；有具体人员时月薪自动汇总二级人员工资，个人工资为空则继承岗位默认工资
       </div>
     </div>
   );

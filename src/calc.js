@@ -18,6 +18,14 @@ function getPersonSalary(person, role) {
   return Number(person.salary) > 0 ? Number(person.salary) : (Number(role?.salary) || 0);
 }
 
+export function getRoleMonthlyCost(role, people = []) {
+  const rolePeople = people.filter(person => person.roleName === role?.name && (person.status || 'active') !== 'inactive');
+  if (rolePeople.length > 0) {
+    return rolePeople.reduce((sum, person) => sum + getPersonSalary(person, role), 0);
+  }
+  return getEffectiveRoleCount(role, people) * (Number(role?.salary) || 0);
+}
+
 const aiPointKeys = ['aiRate', 'aiDur', 'shotRatio', 'aiImgPts', 'aiImgN'];
 
 export function getProjectAiConfig(project, globalConfig) {
@@ -50,7 +58,7 @@ export function calcProjectCost(p, platforms, globalConfig, roles, people = []) 
       }
       return a + (role ? role.salary * s.ratio : 0) * months;
     }, 0)
-    : roles.reduce((a, r) => a + getEffectiveRoleCount(r, people) * r.salary * months, 0);
+    : roles.reduce((a, r) => a + getRoleMonthlyCost(r, people) * months, 0);
   const fixCost = (globalConfig.cSoft + globalConfig.cServer) * months + globalConfig.cMisc;
   const scriptCost = p.scriptCost || 0;
   const total = aiCost + hrCost + fixCost + scriptCost;
