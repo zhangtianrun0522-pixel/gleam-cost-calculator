@@ -29,6 +29,7 @@
 - 已完成首屏体验优化：`成本曲线` Tab 改为 React lazy 按需加载，Chart.js 不再进入首屏主包。
 - 已执行数据库完整性护栏：新增并已应用远端迁移 `20260605192000_guard_record_project_integrity.sql`，清理孤儿积分记录/制作进度，为 `organization_point_records.project_id`、`organization_point_records.person_id`、`organization_production_progress.project_id` 增加外键；项目删除时关联积分记录/进度级联删除，人员删除时积分记录保留但 `person_id` 置空。
 - 已执行 `npm audit fix`：`ws` 间接依赖从 8.20.0 升至 8.21.0，当前 `npm audit --omit=dev` 为 0 漏洞。
+- 已部署 Vercel 生产环境并推送 Git 分支：production deployment `dpl_3zk8QNRpqkrery52CC2xKX3NYFri` 已 Ready，已 alias 到 `https://gleam-cost-calculator.vercel.app`；当前 `codex/org-permissions` 已推送到 `origin/codex/org-permissions`。
 - 已从当前功能分支切出 `codex/org-permissions`，准备实现组织邀请与权限管理 MVP。
 - `打开成本核算器.html` 确认为本地直接打开网站的快捷方式，本轮不纳入功能改动。
 - 已确认当前项目目录与仓库根目录一致。
@@ -172,7 +173,8 @@
 - 远端数据库迁移验证：Supabase linked query 确认 `organization_point_records_project_fk`、`organization_point_records_person_fk`、`organization_production_progress_project_fk` 三个外键均已存在；清理后 `organization_projects`、`organization_point_records`、`organization_production_progress` 当前均为 0 行。
 - 依赖修复验证：`npm audit --omit=dev` 返回 `found 0 vulnerabilities`；`npm why ws` 显示当前 `ws@8.21.0` 来自 `@supabase/realtime-js@2.104.1`。
 - 最终验证：`npm test` 通过，3/3；`npm run build` 通过，95 modules transformed，主包 215.90 kB/gzip 73.77 kB，异步曲线包 440.91 kB/gzip 125.31 kB。
-- Vercel 生产部署检查：`https://gleam-cost-calculator.vercel.app` 当前 production deployment 创建于 `2026-05-18 22:21:51 +0800`，不是 `2026-06-03` 当天新部署。
+- Vercel 部署验证：`vercel inspect https://gleam-cost-calculator.vercel.app` 显示 target production、status Ready、created `2026-06-05 19:26:34 +0800`；`curl -I https://gleam-cost-calculator.vercel.app` 返回 HTTP 200，CSP/HSTS/X-Frame-Options/X-Content-Type-Options/Permissions-Policy/Referrer-Policy 均已生效。
+- Vercel 历史排查记录：事故排查时的 production deployment 创建于 `2026-05-18 22:21:51 +0800`，不是 `2026-06-03` 当天新部署；当前生产站已更新为 `2026-06-05` 的新部署。
 - Supabase CLI 检查：已通过 `supabase login` 登录，`supabase projects list -o json` 确认 `yykyokfwmrmtprkfijso` 为 linked 且 `ACTIVE_HEALTHY`。
 - Supabase 远端只读 SQL：`organization_projects`、`organization_people`、`organization_point_records` 当前均为 0 行；当前有效组织仍有配置 1 行、制作进度 2 行、部门 3 行、成员 2 行；UTC `2026-06-03` 各业务表 `updated_at` 命中 0 行。
 - Supabase 旧表恢复源检查：`public.user_data` 当前 2 行，owner 旧行保留 1 个项目、4 个人员、11 条积分记录、1 组制作进度。
