@@ -7,6 +7,28 @@
 本轮新增总积分计划视角：按所有项目全集数汇总积分需求，按项目 staffing ratio 自动拆分到人员/岗位；新增岗位二级人员库、项目具体制作组名单、批次化积分发放/使用记录和人员额度汇总；成本曲线新增全局汇总/单项目分析切换；认证改为登录/注册门禁并按 Supabase 用户同步数据；暂不做月度拆分。
 
 ## 当前状态
+- 本轮排查 `2026-06-03` 发现线上数据疑似清空的问题：Vercel 生产部署最后一次创建时间为 `2026-05-18 22:21:51 +0800`，`2026-06-01` 至 `2026-06-05` 本地 Git 无新提交，初步排除当天新部署直接清库。
+- 已完成 Supabase CLI 登录并连接项目 `yykyokfwmrmtprkfijso`（AI短剧制作成本核算器，`ACTIVE_HEALTHY`），可执行远端只读 SQL。
+- Supabase 远端现状：`2026-06-03` UTC 当天各业务表 `updated_at` 命中均为 0；当前有效组织 `4b06a132-3911-42a5-bc71-38d99dbeedc4` 有配置 1 行、制作进度 2 行、部门 3 行、成员 2 行，但 `organization_projects`、`organization_people`、`organization_point_records` 均为 0 行。
+- 旧 `public.user_data` 仍有 2 行；其中 owner 用户 `4117496e-ae23-44e9-a8ea-ad12bfde83b2` 的旧数据仍包含 1 个项目、4 个人员、11 条积分记录、1 组制作进度，是当前最稳的远端恢复来源。
+- Supabase 备份检查：`supabase backups list --project-ref yykyokfwmrmtprkfijso -o json` 返回 `pitr_enabled: false` 且 `backups: []`，暂不能依赖平台 PITR/物理备份恢复。
+- 已在本机 Chrome/Codex 浏览器 Local Storage 中找到 `gleam_v4_store` 痕迹，其中 Chrome Default 缓存包含 `https://gleam-cost-calculator.vercel.app` 的 key，具备本机缓存恢复可能；直接 JSON 提取尚未完成。
+- Chrome Default 生产域名 `gleam_v4_store` 已可解析，但当前候选为 projects 0、people 0、pointRecords 0、productionProgress 2，说明本机 Chrome 的生产缓存也已被空组织状态覆盖。
+- Codex 内置浏览器本地开发域名缓存可解析出多个旧候选，最多包含 1 个项目、4 个人员、4 条积分记录、1 组制作进度；文件时间主要在 `2026-05-11` 左右，完整度低于 Supabase 旧 `user_data` 的 11 条积分记录，不足以覆盖用户反馈的 5 月 12 日后大量修改。
+- Chrome Sync Data / History 对项目名的命中主要来自飞书文档浏览记录（如制作统筹总表、时间线、企划书），未发现成本核算器 5 月 12 日后完整 `gleam_v4_store` 状态。
+- 已做本地止血修复草案：组织自动保存改为先 upsert 后清理旧行，避免先 delete 后 insert 失败造成整表清空；并过滤非 UUID 的部门 id，防止 `pending-dept-*` 乐观部门 id 写入 Supabase 外键。
+- 事故机制诊断：组织分表同步若曾采用“先按组织删除全表旧行，再插入当前前端 state”的全量覆盖策略，当某次前端加载到空 `projects/people/pointRecords`、成员范围过滤后的局部 state，或插入阶段因外键/字段错误失败时，会把线上项目、人员、积分记录删空。
+- 项目改名异常诊断：当前功能仍有多处用 `project.name` 作为关联键（积分记录 `projectName`、制作进度 `productionProgress[project.name]`、筛选与展示），而不是稳定 `project.id`；项目名变更后，旧记录仍挂在旧名字下，界面按新名字查询时就表现为“整个项目记录没有了”。
+- 项目身份稳定性诊断：`addProject` 当前不会在本地立刻生成项目 `id`，`saveOrgData` 只在同步时临时补 id；新项目若未经历一次云端 reload，本地自动保存可能反复生成不同项目 id，进一步放大项目记录、积分记录和制作进度的关联错配。
+- 已完成一次项目全面体检：生产构建可通过，本地 preview 可返回页面；主要健康风险集中在项目身份/关联键、自动保存缺少事务和恢复模式、组织分表缺少外键完整性、缺少自动化测试/校验脚本、安全响应头缺失，以及 `ws` 间接依赖存在 1 个 moderate 漏洞。
+- 已执行体检后第一轮非破坏性修复：导出当前 Supabase public 业务表 JSON 快照到 `/private/tmp/gleam-business-backup-20260605-185810.json`，并切出旧 `user_data` 候选到 `/private/tmp/gleam-user-data-candidates-20260605-185810.json`；由于 Docker 未运行且本机无 `pg_dump/psql`，暂未生成完整物理 SQL dump。
+- 已修复项目身份与改名关联：新增 `src/identity.js`，新建/加载项目时补稳定 `project.id`，积分记录和制作进度优先按 `projectId` 关联，同时兼容旧 `projectName`；项目改名时迁移本地旧记录关联，项目删除时同步清理对应积分记录和进度。
+- 已补基础工程护栏：新增 `npm test`（Node 内置 test runner）和 `src/identity.test.js`；`vercel.json` 增加 CSP/HSTS/X-Frame-Options/X-Content-Type-Options 等安全头；`.gitignore` 忽略 `.DS_Store` 和 `supabase/.temp`。
+- 用户决定旧数据“没了就没了”，后续不再优先回灌恢复；当前优先级改为防复发和体验优化。
+- 已继续补防复发：`AuthGate` 记录云端加载后的关键数据快照，自动保存前若发现项目/人员/积分记录同时清空，或项目 id 集合整体被不相干数据替换，会阻止本次自动覆盖并在 Header 显示“已阻止危险同步”。
+- 已完成首屏体验优化：`成本曲线` Tab 改为 React lazy 按需加载，Chart.js 不再进入首屏主包。
+- 已执行数据库完整性护栏：新增并已应用远端迁移 `20260605192000_guard_record_project_integrity.sql`，清理孤儿积分记录/制作进度，为 `organization_point_records.project_id`、`organization_point_records.person_id`、`organization_production_progress.project_id` 增加外键；项目删除时关联积分记录/进度级联删除，人员删除时积分记录保留但 `person_id` 置空。
+- 已执行 `npm audit fix`：`ws` 间接依赖从 8.20.0 升至 8.21.0，当前 `npm audit --omit=dev` 为 0 漏洞。
 - 已从当前功能分支切出 `codex/org-permissions`，准备实现组织邀请与权限管理 MVP。
 - `打开成本核算器.html` 确认为本地直接打开网站的快捷方式，本轮不纳入功能改动。
 - 已确认当前项目目录与仓库根目录一致。
@@ -52,6 +74,8 @@
 - 已在 Header 展示当前组织和角色，并在无全局写权限时禁用全局配置、项目、积分记录的主要编辑入口。
 
 ## 下一步
+- 体检后的 P0/P1 修复优先级：先备份远端并恢复可恢复数据；随后把项目/积分/制作进度统一迁到稳定 `project.id`，新建项目本地立即生成 id；给组织保存增加恢复模式保护、空数据保护和事务化 RPC；补最小回归测试覆盖“改名不丢记录、空状态不覆盖云端、组织权限写入范围”。
+- 下一步建议：用线上空数据状态重新新建 1 个项目、1 个人员、1 条积分记录和 1 条制作进度，验证外键/RLS/自动同步保护在真实浏览器里的完整写入链路。
 - 继续收敛组织权限 MVP：跑构建、检查 RLS SQL 可执行性，并用 Supabase 真实环境验证老用户迁移、Owner 邀请、受邀邮箱自动加入、成员范围过滤。
 - 已将 department_lead 的写入升级为 scoped 行级 upsert：可编辑可见项目、积分记录和制作进度；仍不允许整体覆盖组织配置、人员库、部门和成员。
 - 收紧 department_lead 写权限：数据库层只允许写绑定部门或绑定项目，前端项目所属部门下拉只展示其可写部门，避免误配 `global` 后越权。
@@ -67,6 +91,15 @@
 - 若构建耗时影响开发体验，再定位 Vite/Node 启动慢的环境原因或做 chunk 拆分。
 
 ## 风险
+- 全面体检发现：`vercel.json` 当前只有 SPA rewrite，没有 CSP、HSTS、X-Frame-Options、X-Content-Type-Options 等安全响应头；短期不影响功能，但生产站安全基线偏弱。
+- 全面体检发现：`organization_point_records` 和 `organization_production_progress` 用文本 `project_id/person_id` 但没有外键约束，允许产生孤儿记录；当前 RLS 与前端筛选都依赖这些关联，数据一旦错配会继续表现为“记录消失”。
+- 全面体检发现：项目没有 `test`/`lint` 脚本，当前只能靠构建发现语法层问题，无法自动防住同步、权限、改名、恢复这类业务回归。
+- 全面体检发现：`npm audit --omit=dev` 返回 1 个 moderate 漏洞，来源为 `@supabase/realtime-js` 间接依赖 `ws@8.20.0`；dry-run 显示可升到 `ws@8.21.0` 修复。
+- `2026-06-03` 前数据能否完整恢复尚未确认；当前最有希望来源是本机 Chrome Local Storage、Supabase 旧 `user_data`/组织表残留、Supabase 备份/PITR。
+- Supabase 平台 PITR/物理备份当前不可用；恢复前必须先导出/备份当前远端 public 数据，再将旧 `user_data` 转换为组织分表回灌，避免覆盖现有部门、成员和配置。
+- 用户确认 5 月 12 日后有大量修改；当前已发现的 Supabase 旧表与本机缓存候选都不足以证明可完整恢复这些后续修改，需继续找其他设备、其他浏览器/Profile、未被覆盖的本地备份或从飞书资料手工重建。
+- 之前记录的迁移前备份路径 `/private/tmp/gleam-supabase-backups/user_data-before-org-permissions-20260512-management.json` 当前不存在，可能已被系统清理。
+- 在未确认恢复点前，不建议继续打开线上应用或编辑数据，避免本地缓存和云端状态继续被覆盖。
 - 项目包含 `.env.local`，避免输出或提交敏感配置。
 - 若本地与远端存在差异，需要先确认同步策略，避免覆盖未提交改动。
 - 云端 `templates` 字段是否已在 Supabase 表中存在，需要实际登录同步验证；本轮未访问线上数据。
@@ -85,6 +118,9 @@
 - 当前 in-app browser 自动导航仍可能超时，但项目生产构建和 `vite preview` 已可用；若浏览器继续卡住，优先重置浏览器会话或手动打开 `http://127.0.0.1:4173/`。
 
 ## 关键决策
+- 恢复数据优先级：先只读提取本机浏览器缓存与 Supabase 远端快照；确认候选数据完整后，再备份当前线上数据并执行回灌。
+- Supabase 恢复优先级更新：优先使用 owner 旧 `public.user_data` 作为恢复源；Chrome Local Storage 作为备选；PITR/物理备份当前不可用。
+- 自动保存止血优先于功能扩展：避免继续发生“读取空/默认状态后自动覆盖云端”的风险。
 - 按工作区规则先建立项目级协作与进度文件，作为后续开发的状态锚点。
 - 采用最小修复：认证同步补齐 store 读写和 effect 依赖，`sync.js` 保持兼容旧云端数据。
 - 积分计划先做总量，不做月度：当前项目没有明确起止日期，先按项目全集数计算更符合现有数据约束。
@@ -124,6 +160,24 @@
 - 本地预览问题按开发环境基础设施处理，不视为业务功能设计缺失；优先制度化端口、进程、入口文件和验证顺序。
 
 ## 验证结果
+- 全面体检验证：`npm run build` 通过，Vite 6.4.2，93 modules transformed，产物 `dist/assets/index-DDuQKBai.js` 为 653.74 kB/gzip 198.42 kB，触发超过 500 kB chunk 警告。
+- 全面体检验证：`npm test` 失败，原因是 `package.json` 未定义 `test` 脚本。
+- 全面体检验证：`npm audit --omit=dev` 联网审计完成，发现 1 个 moderate 漏洞；`npm audit fix --dry-run` 显示会将 `ws` 从 8.20.0 调整到 8.21.0，未修改工作树。
+- 全面体检验证：本地 preview 启动于 `http://127.0.0.1:4173/`，受控 `curl -sL` 读取根页面返回 425 字节 HTML；已关闭本次 preview 进程。
+- 全面体检验证：`npm outdated` 显示 `@supabase/supabase-js` 可从 2.104.1 升到 2.107.0，`vite` 可从 6.4.2 升到 6.4.3/8.0.16，`zustand` 可从 5.0.12 升到 5.0.14；React 19 为大版本升级，不建议恢复期处理。
+- 修复后验证：`npm test` 通过，3 个身份关联测试全部 pass；`npm run build` 通过，94 modules transformed，产物 `dist/assets/index-1fCyqip_.js` 为 654.98 kB/gzip 198.87 kB，仍有 500 kB chunk 警告。
+- 修复后验证：`vercel.json` 可被 `JSON.parse` 正常解析；Supabase 业务表 JSON 快照行数为 departments 3、organization_configs 1、organization_invites 2、organization_members 2、organization_projects 0、organization_people 0、organization_point_records 0、organization_production_progress 2、organizations 9、user_data 2。
+- 防复发/体验优化后验证：`npm test` 通过，3/3；`npm run build` 通过，95 modules transformed，主包 `dist/assets/index-xaZIES40.js` 为 215.90 kB/gzip 73.77 kB，异步曲线包 `dist/assets/index-By2M6ddD.js` 为 440.91 kB/gzip 125.31 kB，Vite chunk 警告消失。
+- 防复发/体验优化后 preview 验证：`http://127.0.0.1:4173/` 根页面返回 425 字节 HTML，主包和异步曲线包均返回 200；已关闭本次 preview 进程。
+- 远端数据库迁移验证：Supabase linked query 确认 `organization_point_records_project_fk`、`organization_point_records_person_fk`、`organization_production_progress_project_fk` 三个外键均已存在；清理后 `organization_projects`、`organization_point_records`、`organization_production_progress` 当前均为 0 行。
+- 依赖修复验证：`npm audit --omit=dev` 返回 `found 0 vulnerabilities`；`npm why ws` 显示当前 `ws@8.21.0` 来自 `@supabase/realtime-js@2.104.1`。
+- 最终验证：`npm test` 通过，3/3；`npm run build` 通过，95 modules transformed，主包 215.90 kB/gzip 73.77 kB，异步曲线包 440.91 kB/gzip 125.31 kB。
+- Vercel 生产部署检查：`https://gleam-cost-calculator.vercel.app` 当前 production deployment 创建于 `2026-05-18 22:21:51 +0800`，不是 `2026-06-03` 当天新部署。
+- Supabase CLI 检查：已通过 `supabase login` 登录，`supabase projects list -o json` 确认 `yykyokfwmrmtprkfijso` 为 linked 且 `ACTIVE_HEALTHY`。
+- Supabase 远端只读 SQL：`organization_projects`、`organization_people`、`organization_point_records` 当前均为 0 行；当前有效组织仍有配置 1 行、制作进度 2 行、部门 3 行、成员 2 行；UTC `2026-06-03` 各业务表 `updated_at` 命中 0 行。
+- Supabase 旧表恢复源检查：`public.user_data` 当前 2 行，owner 旧行保留 1 个项目、4 个人员、11 条积分记录、1 组制作进度。
+- Supabase 备份检查：`pitr_enabled: false`、`backups: []`。
+- 本机缓存检查：`rg -a "gleam_v4_store"` 在 Chrome Default Local Storage LevelDB 中命中 `https://gleam-cost-calculator.vercel.app`；初步 DevTools/LevelDB 解析尚未导出可直接回灌 JSON。
 - `node -e "import('./src/calc.js').then(m=>console.log(m.fmt(12345)))"` 通过，输出 `¥1.2万`。
 - `npm run build` 通过：Vite 6.4.2，91 modules transformed，产物输出到 `dist/`。
 - 构建警告：`dist/assets/index-Dvru_4k1.js` 约 591.10 kB，超过 Vite 默认 500 kB chunk 警告阈值。

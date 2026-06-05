@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import useStore from '../../store';
 import { calcEpisodePoints, calcProjectPoints, fmt, fmtPoints, getProjectAiConfig, hasProjectAiOverrides } from '../../calc';
 import { getWriteAccess } from '../../sync';
+import { getProjectKey, getProjectProgress, recordMatchesProject, resolveProjectByKey } from '../../identity';
 
 const emptyBatchRow = { personId: '', personName: '', roleName: '', plannedPoints: '', grantedPoints: '' };
 
@@ -44,13 +45,14 @@ export default function PointsPlanTab() {
   const estimatedCost = platform.rate > 0 ? totalPoints / platform.rate : 0;
   const totalEps = projects.reduce((sum, p) => sum + (Number(p.eps) || 0), 0);
   const issueProject = issueProjectIdx === '' ? null : projects[Number(issueProjectIdx)];
-  const activeProjectName = batchProject || issueProject?.name || '';
-  const activeProject = activeProjectName ? projects.find(project => project.name === activeProjectName) : null;
-  const detailRows = activeProjectName
-    ? rows.filter(({ project }) => project.name === activeProjectName)
+  const activeProjectKey = batchProject || (issueProject ? getProjectKey(issueProject) : '');
+  const activeProject = activeProjectKey ? resolveProjectByKey(projects, activeProjectKey) : null;
+  const activeProjectName = activeProject?.name || '';
+  const detailRows = activeProject
+    ? rows.filter(({ project }) => getProjectKey(project) === getProjectKey(activeProject))
     : rows;
-  const scopedPointRecords = activeProjectName
-    ? pointRecords.filter(record => record.projectName === activeProjectName)
+  const scopedPointRecords = activeProject
+    ? pointRecords.filter(record => recordMatchesProject(record, activeProject))
     : pointRecords;
   const scopedPlannedPoints = activeProject ? calcProjectPoints(activeProject, globalConfig, reserveRate).totalPoints : totalPoints;
   const scopedIssuedPoints = scopedPointRecords.reduce((sum, record) => sum + (Number(record.grantedPoints) || 0), 0);
@@ -58,20 +60,20 @@ export default function PointsPlanTab() {
   const scopedEps = activeProject ? (Number(activeProject.eps) || 0) : totalEps;
   const expectedProgressRate = scopedPlannedPoints > 0 ? Math.min(scopedIssuedPoints / scopedPlannedPoints, 1) : 0;
   const expectedEpisode = Math.min(Math.floor(expectedProgressRate * scopedEps), scopedEps);
-  const activeProgress = activeProjectName ? (productionProgress[activeProjectName] || {}) : {};
+  const activeProgress = activeProject ? getProjectProgress(productionProgress, activeProject) : {};
   const actualEpisode = Math.min(Math.max(Number(activeProgress.actualEpisode) || 0, 0), Math.max(scopedEps, 0));
   const actualProgressRate = scopedEps > 0 ? Math.min(actualEpisode / scopedEps, 1) : 0;
   const donutIssuedDeg = scopedPlannedPoints > 0 ? Math.min(scopedIssuedPoints / scopedPlannedPoints, 1) * 360 : 0;
 
   const getProjectDashboard = (project) => {
     const plannedPoints = calcProjectPoints(project, globalConfig, reserveRate).totalPoints;
-    const records = pointRecords.filter(record => record.projectName === project.name);
+    const records = pointRecords.filter(record => recordMatchesProject(record, project));
     const issuedPoints = records.reduce((sum, record) => sum + (Number(record.grantedPoints) || 0), 0);
     const remainingPoints = plannedPoints - issuedPoints;
     const eps = Number(project.eps) || 0;
     const expectedRate = plannedPoints > 0 ? Math.min(issuedPoints / plannedPoints, 1) : 0;
     const expectedEp = Math.min(Math.floor(expectedRate * eps), eps);
-    const progress = productionProgress[project.name] || {};
+    const progress = getProjectProgress(productionProgress, project);
     const actualEp = Math.min(Math.max(Number(progress.actualEpisode) || 0, 0), eps);
     const actualRate = eps > 0 ? Math.min(actualEp / eps, 1) : 0;
     const issuedDeg = plannedPoints > 0 ? Math.min(issuedPoints / plannedPoints, 1) * 360 : 0;
@@ -151,7 +153,7 @@ export default function PointsPlanTab() {
         usageRate: item.plannedPoints > 0 ? item.usedPoints / item.plannedPoints : 0,
       }))
       .sort((a, b) => b.plannedPoints - a.plannedPoints);
-  }, [activeProjectName, pointRecords, projects, people, globalConfig, reserveRate]);
+  }, [activeProjectKey, pointRecords, projects, people, globalConfig, reserveRate]);
 
   const selectedIssuePeopleIds = new Set(batchRows.map(row => row.personId).filter(Boolean));
   const selectableExtraPeople = people.filter(person => !selectedIssuePeopleIds.has(person.id) && (person.status || 'active') !== 'inactive');
@@ -166,10 +168,10 @@ export default function PointsPlanTab() {
     setBatchRows(batchRows.map((row, i) => i === idx ? { ...row, ...patch } : row));
   };
 
-  const getProjectPersonHistory = (projectName, personId, personName) => (
+  const getProjectPersonHistory = (project, personId, personName) => (
     pointRecords
       .filter(record => (
-        record.projectName === projectName
+        recordMatchesProject(record, project)
         && (
           (personId && record.personId === personId)
           || (!personId && record.personName === personName)
@@ -179,7 +181,7 @@ export default function PointsPlanTab() {
   );
 
   const getRowCumulativeIssued = (row) => (
-    getProjectPersonHistory(batchProject, row.personId, row.personName) + (Number(row.grantedPoints) || 0)
+    getProjectPersonHistory(activeProject, row.personId, row.personName) + (Number(row.grantedPoints) || 0)
   );
 
   const getRowLimitClass = (row) => {
@@ -198,7 +200,7 @@ export default function PointsPlanTab() {
 
   const applyProjectDraft = (project) => {
     const generatedRows = buildRowsFromProject(project);
-    setBatchProject(project.name);
+    setBatchProject(getProjectKey(project));
     setBatchName(`${project.name} · ${batchDate} 发放`);
     setBatchRows(generatedRows.length > 0 ? generatedRows : [emptyBatchRow]);
   };
@@ -226,7 +228,7 @@ export default function PointsPlanTab() {
     if (!issueProject) return;
     const generatedRows = buildRowsFromProject(issueProject);
     if (generatedRows.length === 0) return;
-    setBatchProject(issueProject.name);
+    setBatchProject(getProjectKey(issueProject));
     setBatchName(`${issueProject.name} · ${batchDate} 发放`);
     setBatchRows(generatedRows);
   };
@@ -260,12 +262,15 @@ export default function PointsPlanTab() {
       .filter((row) => row.personName && row.grantedPoints > 0);
     if (cleanRows.length === 0) return;
     const batchId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const selectedProject = resolveProjectByKey(projects, batchProject);
+    const selectedProjectKey = selectedProject ? getProjectKey(selectedProject) : '';
     const records = cleanRows.map((row, idx) => ({
       id: `${batchId}-${idx}`,
       batchId,
       batchName: batchName.trim() || `积分批次 ${batchDate}`,
       date: batchDate,
-      projectName: batchProject,
+      projectId: selectedProjectKey,
+      projectName: selectedProject?.name || '',
       note: batchNote.trim(),
       personId: row.personId,
       personName: row.personName,
@@ -317,7 +322,7 @@ export default function PointsPlanTab() {
     return (
       <div
         className={`card points-dashboard-card${isActive ? ' active' : ''}`}
-        key={`${project.name}-${idx}`}
+        key={getProjectKey(project) || `${project.name}-${idx}`}
         onClick={() => handleIssueProjectChange(String(idx))}
       >
         <div className="points-dashboard-main">
@@ -351,10 +356,10 @@ export default function PointsPlanTab() {
               type="number"
               min="0"
               max={dashboard.eps || 0}
-              value={productionProgress[project.name]?.actualEpisode ?? ''}
+              value={getProjectProgress(productionProgress, project).actualEpisode ?? ''}
               placeholder="填写集数"
               disabled={!canWrite}
-              onChange={e => updateProductionProgress(project.name, { actualEpisode: Math.max(Number(e.target.value) || 0, 0) })}
+              onChange={e => updateProductionProgress(getProjectKey(project), { actualEpisode: Math.max(Number(e.target.value) || 0, 0), projectId: getProjectKey(project) })}
             />
           </div>
         </div>
@@ -469,7 +474,7 @@ export default function PointsPlanTab() {
               <label>关联项目</label>
               <select value={batchProject} disabled={!canWrite} onChange={e => setBatchProject(e.target.value)}>
                 <option value="">不指定项目</option>
-                {projects.map((p, idx) => <option key={`${p.name}-${idx}`} value={p.name}>{p.name}</option>)}
+                {projects.map((p, idx) => <option key={getProjectKey(p) || `${p.name}-${idx}`} value={getProjectKey(p)}>{p.name}</option>)}
               </select>
             </div>
           </div>
@@ -562,7 +567,7 @@ export default function PointsPlanTab() {
           const projectEpPoints = calcEpisodePoints(getProjectAiConfig(project, globalConfig));
           const configLabel = hasProjectAiOverrides(project) ? '项目配置' : '全局默认';
           return (
-            <div className="points-project" key={`${project.name}-${idx}`}>
+            <div className="points-project" key={getProjectKey(project) || `${project.name}-${idx}`}>
               <div className="points-project-main">
                 <div>
                   <div style={{ fontWeight: 500, fontSize: 14 }}>{project.name}</div>

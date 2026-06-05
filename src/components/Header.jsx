@@ -30,8 +30,8 @@ export default function Header({ user, syncStatus, onLogout }) {
           </span>
         </div>
         <div className="auth-chip">
-          <span className={syncStatus === 'error' ? 'bad' : ''}>
-            {syncStatus === 'syncing' ? '同步中...' : syncStatus === 'saved' ? '已同步' : syncStatus === 'loading' ? '读取中...' : syncStatus === 'error' ? '同步失败' : '已登录'}
+          <span className={syncStatus === 'error' || syncStatus === 'blocked' ? 'bad' : ''}>
+            {syncStatus === 'syncing' ? '同步中...' : syncStatus === 'saved' ? '已同步' : syncStatus === 'loading' ? '读取中...' : syncStatus === 'blocked' ? '已阻止危险同步' : syncStatus === 'error' ? '同步失败' : '已登录'}
           </span>
           <span>{orgContext?.organization?.name || user?.user_metadata?.team_name || user?.email}</span>
           {orgContext?.member?.role && <span>{orgContext.member.role}</span>}

@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import Header from './components/Header';
 import AuthGate from './components/AuthGate';
 import TabBar from './components/TabBar';
 import GlobalConfig from './components/GlobalConfig';
 import ProjectsTab from './components/ProjectsTab';
 import PoolTab from './components/PoolTab';
-import CurveTab from './components/CurveTab';
 import PointsPlanTab from './components/PointsPlanTab';
 import OrgAdminTab from './components/OrgAdminTab';
 import useStore from './store';
 import { getWriteAccess } from './sync';
+
+const CurveTab = lazy(() => import('./components/CurveTab'));
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('global');
@@ -34,7 +35,11 @@ export default function App() {
           {activeTab === 'projects' && <ProjectsTab />}
           {activeTab === 'points' && <PointsPlanTab />}
           {activeTab === 'pool' && <PoolTab />}
-          {activeTab === 'curve' && <CurveTab />}
+          {activeTab === 'curve' && (
+            <Suspense fallback={<div className="card" style={{ textAlign: 'center', color: '#aaa', padding: 20 }}>正在加载成本曲线...</div>}>
+              <CurveTab />
+            </Suspense>
+          )}
           {activeTab === 'org' && <OrgAdminTab />}
         </div>
       )}

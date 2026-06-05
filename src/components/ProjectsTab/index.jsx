@@ -3,6 +3,7 @@ import useStore from '../../store';
 import { getProjectAiConfig } from '../../calc';
 import ProjectCard from './ProjectCard';
 import { getWriteAccess } from '../../sync';
+import { getProjectKey } from '../../identity';
 
 export default function ProjectsTab() {
   const projects = useStore(s => s.projects);
@@ -53,7 +54,7 @@ export default function ProjectsTab() {
       )}
       {projects.map((project, i) => (
         <ProjectCard
-          key={i}
+          key={getProjectKey(project) || i}
           project={project}
           isOpen={openIndex === i}
           onToggle={() => setOpenIndex(openIndex === i ? -1 : i)}

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { createStableId, ensureProjectIds, getProjectKey, recordMatchesProject } from "./identity";
 
 const defaultPlatforms = [
   { name: "即梦 AI", rate: 100, active: true },
@@ -18,7 +19,7 @@ const defaultRoles = [
 
 const defaultProjects = [
   {
-    name: "Fractured Recall S1", eps: 20, days: 30, scriptCost: 0,
+    id: createStableId("project"), name: "Fractured Recall S1", eps: 20, days: 30, scriptCost: 0,
     revPlat: 800, revBrand: 50000, revLic: 30000, revMerch: 10000, revViews: 500, revCpm: 8,
     staffing: [],
   },
@@ -72,7 +73,7 @@ const useStore = create(
       platforms: migrated.platforms || defaultState.platforms,
       roles: migrated.roles || defaultState.roles,
       globalConfig: migrated.globalConfig || defaultState.globalConfig,
-      projects: migrated.projects || defaultState.projects,
+      projects: ensureProjectIds(migrated.projects || defaultState.projects),
       templates: migrated.templates || defaultState.templates,
       people: defaultState.people,
       pointRecords: defaultState.pointRecords,
@@ -85,7 +86,7 @@ const useStore = create(
       setPlatforms: (platforms) => set({ platforms }),
       setRoles: (roles) => set({ roles }),
       setGlobalConfig: (globalConfig) => set({ globalConfig }),
-      setProjects: (projects) => set({ projects }),
+      setProjects: (projects) => set({ projects: ensureProjectIds(projects) }),
       setTemplates: (templates) => set({ templates }),
       setPeople: (people) => set({ people }),
       setPointRecords: (pointRecords) => set({ pointRecords }),
@@ -97,11 +98,49 @@ const useStore = create(
       resetStore: () => set(defaultState),
 
       updateProject: (index, patch) =>
-        set((state) => ({ projects: state.projects.map((p, i) => i === index ? { ...p, ...patch } : p) })),
+        set((state) => {
+          const current = state.projects[index];
+          if (!current) return {};
+          const nextProject = current.id
+            ? { ...current, ...patch }
+            : { ...current, id: createStableId("project"), ...patch };
+          const nextKey = getProjectKey(nextProject);
+          const renamed = patch.name !== undefined && patch.name !== current.name;
+          const nextProgress = { ...state.productionProgress };
+          if (renamed && current.name && nextProgress[current.name]) {
+            nextProgress[nextKey] = { ...nextProgress[current.name], projectId: nextKey };
+            delete nextProgress[current.name];
+          } else if (nextProgress[nextKey]) {
+            nextProgress[nextKey] = { ...nextProgress[nextKey], projectId: nextKey };
+          }
+          return {
+            projects: state.projects.map((p, i) => i === index ? nextProject : p),
+            pointRecords: renamed
+              ? state.pointRecords.map((record) => (
+                recordMatchesProject(record, current)
+                  ? { ...record, projectId: nextKey, projectName: nextProject.name }
+                  : record
+              ))
+              : state.pointRecords,
+            productionProgress: nextProgress,
+          };
+        }),
       deleteProject: (index) =>
-        set((state) => ({ projects: state.projects.filter((_, i) => i !== index) })),
+        set((state) => {
+          const project = state.projects[index];
+          if (!project) return {};
+          const projectKey = getProjectKey(project);
+          const nextProgress = { ...state.productionProgress };
+          delete nextProgress[projectKey];
+          if (project.name) delete nextProgress[project.name];
+          return {
+            projects: state.projects.filter((_, i) => i !== index),
+            pointRecords: state.pointRecords.filter((record) => !recordMatchesProject(record, project)),
+            productionProgress: nextProgress,
+          };
+        }),
       addProject: (project) =>
-        set((state) => ({ projects: [...state.projects, project] })),
+        set((state) => ({ projects: [...state.projects, project.id ? project : { ...project, id: createStableId("project") }] })),
 
       addPlatform: (platform) =>
         set((state) => ({ platforms: [...state.platforms, platform] })),
@@ -148,13 +187,14 @@ const useStore = create(
         set((state) => ({ pointRecords: state.pointRecords.filter((r) => r.id !== id) })),
       updatePointRecord: (id, patch) =>
         set((state) => ({ pointRecords: state.pointRecords.map((r) => r.id === id ? { ...r, ...patch } : r) })),
-      updateProductionProgress: (projectName, patch) =>
+      updateProductionProgress: (projectKey, patch) =>
         set((state) => ({
           productionProgress: {
             ...state.productionProgress,
-            [projectName]: {
-              ...(state.productionProgress[projectName] || {}),
+            [projectKey]: {
+              ...(state.productionProgress[projectKey] || {}),
               ...patch,
+              projectId: patch.projectId || projectKey,
             },
           },
         })),

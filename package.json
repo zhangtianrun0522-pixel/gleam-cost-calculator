@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --force",
+    "test": "node --test",
     "build": "vite build",
     "preview": "vite preview"
   },

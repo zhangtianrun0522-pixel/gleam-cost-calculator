@@ -10,6 +10,8 @@ const ORG_TABLES = {
   progress: 'organization_production_progress',
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function isMissingOrgSchemaError(error) {
   const message = String(error?.message || '');
   return error?.code === '42P01'
@@ -18,6 +20,37 @@ function isMissingOrgSchemaError(error) {
     || message.includes('Could not find the table')
     || message.includes('does not exist')
     || message.includes('schema cache');
+}
+
+function isValidUuid(value) {
+  return UUID_RE.test(String(value || '').trim());
+}
+
+function normalizeDepartmentId(value) {
+  const id = String(value || '').trim();
+  return isValidUuid(id) ? id : '';
+}
+
+function getFirstPersistedDepartmentId(departments = []) {
+  return departments.find((department) => !department.pending && isValidUuid(department.id))?.id || '';
+}
+
+function pgListValue(value) {
+  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+async function upsertRows(supabase, table, rows, onConflict) {
+  if (!rows.length) return { error: null };
+  return supabase.from(table).upsert(rows, { onConflict });
+}
+
+async function deleteRowsMissingFromPayload(supabase, table, organizationId, idColumn, ids) {
+  if (!ids.length) return { error: null };
+  return supabase
+    .from(table)
+    .delete()
+    .eq('organization_id', organizationId)
+    .not(idColumn, 'in', `(${ids.map(pgListValue).join(',')})`);
 }
 
 function ensureId(prefix, value, index) {
@@ -52,23 +85,25 @@ function normalizePeople(people = []) {
 
 function toProjectRow(organizationId, project, index) {
   const id = getProjectId(project, index);
+  const departmentId = normalizeDepartmentId(project.departmentId);
   return {
     organization_id: organizationId,
     id,
-    department_id: project.departmentId || null,
-    data: { ...project, id },
+    department_id: departmentId || null,
+    data: { ...project, id, departmentId },
     updated_at: new Date().toISOString(),
   };
 }
 
 function toPersonRow(organizationId, person, index) {
   const id = getPersonId(person, index);
+  const departmentId = normalizeDepartmentId(person.departmentId);
   return {
     organization_id: organizationId,
     id,
     user_id: person.memberUserId || person.userId || null,
-    department_id: person.departmentId || null,
-    data: { ...person, id },
+    department_id: departmentId || null,
+    data: { ...person, id, departmentId },
     updated_at: new Date().toISOString(),
   };
 }
@@ -89,13 +124,15 @@ function toPointRecordRow(organizationId, record, index, projectNameToId, person
 
 export function getWriteAccess(member) {
   if (!member) return { canManageOrg: false, canWriteGlobal: false, canWriteScoped: false, canWriteAny: false };
+  const scope = member.access_scope || 'self';
   const canManageOrg = ['owner', 'admin'].includes(member.role);
-  const canWriteScoped = member.role === 'department_lead';
+  const canWriteGlobal = canManageOrg && scope === 'global';
+  const canWriteScoped = member.role === 'department_lead' || (canManageOrg && scope !== 'global');
   return {
     canManageOrg,
-    canWriteGlobal: canManageOrg,
+    canWriteGlobal,
     canWriteScoped,
-    canWriteAny: canManageOrg || canWriteScoped,
+    canWriteAny: canWriteGlobal || canWriteScoped,
   };
 }
 
@@ -399,9 +436,7 @@ export async function loadOrgData(supabase, organizationId, member) {
     }));
     const productionProgress = {};
     (progressRes.data || []).forEach((row) => {
-      const project = projects.find((item) => item.id === row.project_id);
-      const key = project?.name || row.project_id;
-      productionProgress[key] = { ...(row.data || {}), projectId: row.project_id };
+      productionProgress[row.project_id] = { ...(row.data || {}), projectId: row.project_id };
     });
 
     const state = {
@@ -433,15 +468,22 @@ export async function saveOrgData(supabase, organizationId, state) {
   try {
     const projects = normalizeProjects(state.projects || []);
     const people = normalizePeople(state.people || []);
+    const fallbackDepartmentId = getFirstPersistedDepartmentId(state.departments || []);
     const projectsWithDepartments = projects.map((project, index) => ({
       ...project,
-      departmentId: project.departmentId || state.departments?.[0]?.id || '',
+      departmentId: normalizeDepartmentId(project.departmentId) || fallbackDepartmentId,
       id: getProjectId(project, index),
     }));
-    const projectNameToId = new Map(projectsWithDepartments.map((project) => [project.name, project.id]));
-    const personNameToId = new Map(people.map((person) => [person.name, person.id]));
+    const peopleWithDepartments = people.map((person) => ({
+      ...person,
+      departmentId: normalizeDepartmentId(person.departmentId),
+    }));
+    const projectNameToId = new Map(projectsWithDepartments.flatMap((project) => (
+      [[project.name, project.id], [project.id, project.id]].filter(([key]) => key)
+    )));
+    const personNameToId = new Map(peopleWithDepartments.map((person) => [person.name, person.id]));
     const projectRows = projectsWithDepartments.map((project, index) => toProjectRow(organizationId, project, index));
-    const peopleRows = people.map((person, index) => toPersonRow(organizationId, person, index));
+    const peopleRows = peopleWithDepartments.map((person, index) => toPersonRow(organizationId, person, index));
     const recordRows = (state.pointRecords || []).map((record, index) =>
       toPointRecordRow(organizationId, record, index, projectNameToId, personNameToId)
     );
@@ -451,6 +493,15 @@ export async function saveOrgData(supabase, organizationId, state) {
       data: progress || {},
       updated_at: new Date().toISOString(),
     }));
+
+    const upserts = await Promise.all([
+      upsertRows(supabase, ORG_TABLES.projects, projectRows, 'organization_id,id'),
+      upsertRows(supabase, ORG_TABLES.people, peopleRows, 'organization_id,id'),
+      upsertRows(supabase, ORG_TABLES.pointRecords, recordRows, 'organization_id,id'),
+      upsertRows(supabase, ORG_TABLES.progress, progressRows, 'organization_id,project_id'),
+    ]);
+    const upsertError = upserts.find((res) => res.error)?.error;
+    if (upsertError) return { error: upsertError };
 
     const { error: configError } = await supabase
       .from(ORG_TABLES.configs)
@@ -464,23 +515,14 @@ export async function saveOrgData(supabase, organizationId, state) {
       }, { onConflict: 'organization_id' });
     if (configError) return { error: configError };
 
-    const [projectDelete, peopleDelete, recordDelete, progressDelete] = await Promise.all([
-      supabase.from(ORG_TABLES.projects).delete().eq('organization_id', organizationId),
-      supabase.from(ORG_TABLES.people).delete().eq('organization_id', organizationId),
-      supabase.from(ORG_TABLES.pointRecords).delete().eq('organization_id', organizationId),
-      supabase.from(ORG_TABLES.progress).delete().eq('organization_id', organizationId),
+    const deletes = await Promise.all([
+      deleteRowsMissingFromPayload(supabase, ORG_TABLES.projects, organizationId, 'id', projectRows.map((row) => row.id)),
+      deleteRowsMissingFromPayload(supabase, ORG_TABLES.people, organizationId, 'id', peopleRows.map((row) => row.id)),
+      deleteRowsMissingFromPayload(supabase, ORG_TABLES.pointRecords, organizationId, 'id', recordRows.map((row) => row.id)),
+      deleteRowsMissingFromPayload(supabase, ORG_TABLES.progress, organizationId, 'project_id', progressRows.map((row) => row.project_id)),
     ]);
-    const deleteError = [projectDelete, peopleDelete, recordDelete, progressDelete].find((res) => res.error)?.error;
+    const deleteError = deletes.find((res) => res.error)?.error;
     if (deleteError) return { error: deleteError };
-
-    const inserts = [];
-    if (projectRows.length) inserts.push(supabase.from(ORG_TABLES.projects).insert(projectRows));
-    if (peopleRows.length) inserts.push(supabase.from(ORG_TABLES.people).insert(peopleRows));
-    if (recordRows.length) inserts.push(supabase.from(ORG_TABLES.pointRecords).insert(recordRows));
-    if (progressRows.length) inserts.push(supabase.from(ORG_TABLES.progress).insert(progressRows));
-    const results = await Promise.all(inserts);
-    const insertError = results.find((res) => res.error)?.error;
-    if (insertError) return { error: insertError };
 
     return { error: null };
   } catch (err) {
@@ -490,8 +532,13 @@ export async function saveOrgData(supabase, organizationId, state) {
 
 export async function saveScopedOrgData(supabase, organizationId, state) {
   try {
-    const projects = normalizeProjects(state.projects || []);
-    const projectNameToId = new Map(projects.map((project) => [project.name, project.id]));
+    const projects = normalizeProjects(state.projects || []).map((project) => ({
+      ...project,
+      departmentId: normalizeDepartmentId(project.departmentId),
+    }));
+    const projectNameToId = new Map(projects.flatMap((project) => (
+      [[project.name, project.id], [project.id, project.id]].filter(([key]) => key)
+    )));
     const personNameToId = new Map((state.people || []).map((person) => [person.name, person.id]));
     const projectRows = projects.map((project, index) => toProjectRow(organizationId, project, index));
     const recordRows = (state.pointRecords || []).map((record, index) =>

@@ -27,6 +27,46 @@ function withTimeout(promise, ms, errorMessage) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function collectIds(items = []) {
+  return new Set((items || []).map((item) => item?.id).filter(Boolean));
+}
+
+function hasOverlap(left, right) {
+  for (const value of left) {
+    if (right.has(value)) return true;
+  }
+  return false;
+}
+
+function getCriticalSnapshot(state) {
+  return {
+    projectIds: collectIds(state.projects),
+    personIds: collectIds(state.people),
+    recordIds: collectIds(state.pointRecords),
+    projectCount: (state.projects || []).length,
+    personCount: (state.people || []).length,
+    recordCount: (state.pointRecords || []).length,
+  };
+}
+
+function getUnsafeSyncReason(previous, next, access, orgContext) {
+  if (!previous || !access.canWriteGlobal || orgContext?.legacyMode) return '';
+  const hadCriticalData = previous.projectCount > 0 || previous.personCount > 0 || previous.recordCount > 0;
+  if (!hadCriticalData) return '';
+  if (next.projectCount === 0 && next.personCount === 0 && next.recordCount === 0) {
+    return '检测到项目、人员和积分记录同时变为空，已阻止自动覆盖云端。';
+  }
+  if (
+    previous.projectIds.size > 0
+    && next.projectIds.size > 0
+    && !hasOverlap(previous.projectIds, next.projectIds)
+    && next.projectCount <= previous.projectCount
+  ) {
+    return '检测到项目 ID 集合整体变更，已阻止疑似错误状态覆盖云端。';
+  }
+  return '';
+}
+
 export default function AuthGate({ children }) {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -48,6 +88,7 @@ export default function AuthGate({ children }) {
   const userRef = useRef(null);
   const dataReadyRef = useRef(false);
   const syncStatusRef = useRef(syncStatus);
+  const loadedSnapshotRef = useRef(null);
 
   useEffect(() => {
     syncStatusRef.current = syncStatus;
@@ -112,6 +153,7 @@ export default function AuthGate({ children }) {
       actions.setDepartments([]);
       actions.setOrganizationMembers([]);
       actions.setOrganizationInvites([]);
+      loadedSnapshotRef.current = getCriticalSnapshot(useStore.getState());
       setMessage('');
       setSyncStatus(legacyResult.data ? 'saved' : 'idle');
       userIdRef.current = sessionUser.id;
@@ -143,6 +185,7 @@ export default function AuthGate({ children }) {
         actions.resetStore();
         actions.setOrgContext(context);
       }
+      loadedSnapshotRef.current = getCriticalSnapshot(useStore.getState());
       setMessage('');
       setSyncStatus(data ? 'saved' : 'idle');
     }
@@ -206,6 +249,7 @@ export default function AuthGate({ children }) {
       } else if (event === 'SIGNED_OUT') {
         loadSeqRef.current += 1;
         userIdRef.current = null;
+        loadedSnapshotRef.current = null;
         const actions = getActions();
         actions.resetStore();
         actions.setOrgContext(null);
@@ -240,7 +284,6 @@ export default function AuthGate({ children }) {
         if (!latestUser || !dataReadyRef.current || userIdRef.current !== latestUser.id || !latestOrgContext?.organization?.id) return;
         const latestAccess = getWriteAccess(latestOrgContext.member);
         if (!latestAccess.canWriteAny) return;
-        if (syncStatusRef.current !== 'syncing') setSyncStatus('syncing');
         const payload = {
           platforms: latest.platforms,
           roles: latest.roles,
@@ -252,11 +295,20 @@ export default function AuthGate({ children }) {
           productionProgress: latest.productionProgress,
           departments: latest.departments,
         };
+        const nextSnapshot = getCriticalSnapshot(payload);
+        const unsafeReason = getUnsafeSyncReason(loadedSnapshotRef.current, nextSnapshot, latestAccess, latestOrgContext);
+        if (unsafeReason) {
+          setMessage(unsafeReason);
+          setSyncStatus('blocked');
+          return;
+        }
+        if (syncStatusRef.current !== 'syncing') setSyncStatus('syncing');
         const { error } = latestOrgContext.legacyMode
           ? await saveToCloud(supabase, latestUser.id, payload)
           : latestAccess.canWriteGlobal
             ? await saveOrgData(supabase, latestOrgContext.organization.id, payload)
             : await saveScopedOrgData(supabase, latestOrgContext.organization.id, payload);
+        if (!error) loadedSnapshotRef.current = nextSnapshot;
         setSyncStatus(error ? 'error' : 'saved');
       }, 1200);
     });
